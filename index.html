@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>ASTRO PIOCHE</title>
+<style>
+  *{box-sizing:border-box}
+  body{background:#000 radial-gradient(circle at 50% 0,#1d1440 0,#000 700px) no-repeat;color:#ffd84a;font-family:ui-monospace,Menlo,monospace;margin:0;
+    padding:calc(18px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left))}
+  h1{text-align:center;letter-spacing:6px;margin:6px 0 4px;font-size:30px;text-shadow:3px 3px 0 #c0392b}
+  .sub{text-align:center;color:#8fa;margin:0 0 20px;font-size:13px}
+  .card{display:flex;gap:16px;align-items:stretch;max-width:860px;margin:0 auto 22px;padding:14px;border:3px solid #333;border-radius:10px;
+    background:#0d0d0d;position:relative;overflow:hidden}
+  .card::before{content:"";position:absolute;inset:0;background:var(--cv) center/cover;opacity:.14;z-index:0;transform:scale(1.05)}
+  .card>*{position:relative;z-index:1}
+  .box{flex:0 0 220px}
+  .box img{width:100%;height:auto;display:block;border-radius:4px;box-shadow:6px 8px 0 rgba(0,0,0,.6),0 0 0 1px #444}
+  .info{flex:1;display:flex;flex-direction:column;justify-content:center;min-width:0}
+  h2{margin:0 0 10px;color:#7fd;font-size:20px;letter-spacing:2px}
+  .shot{width:100%;max-width:480px;aspect-ratio:4/3;height:auto;image-rendering:pixelated;image-rendering:crisp-edges;display:block;border:3px solid #222;background:#000}
+  .links{display:flex;gap:10px;margin-top:12px;max-width:480px}
+  .links a{flex:1;text-align:center;padding:14px 8px;border:3px solid #ff8a00;color:#fff;text-decoration:none;font-size:18px;background:#1a1a1a;border-radius:6px}
+  .links a.t{border-color:#e33;background:#2a0d0d}
+  .links a:active{transform:translateY(2px)}
+  .c2600{border-color:#5a4a2a} .ccour{border-color:#2a3a6a} .ccpc{border-color:#1f2f9a}
+  footer{text-align:center;color:#555;font-size:11px;margin-top:10px}
+  @media (max-width:640px){
+    .card{flex-direction:column;gap:12px}
+    .box{flex:none;display:flex;justify-content:center}
+    .box img{width:62%;max-width:240px}
+    h2{text-align:center}
+    .shot,.links{max-width:none}
+  }
+</style>
+</head>
+<body>
+<h1>ASTRO PIOCHE</h1>
+<p class="sub">Creuse les zones, evite les meteorites, rejoins la fusee.</p>
+
+<section class="card c2600" style="--cv:url(img/cover-2600.jpg)">
+  <div class="box"><img src="img/cover-2600.jpg" alt="Boite facon console 8 bits a cartouche" width="480" height="660"></div>
+  <div class="info">
+    <h2>ATARI 2600</h2>
+    <img class="shot" src="img/shot-2600.png" alt="Capture version 2600" width="640" height="480">
+    <div class="links"><a class="t" href="2600-touch.html">Tactile</a><a href="2600.html">Clavier</a></div>
+  </div>
+</section>
+
+<section class="card ccour" style="--cv:url(img/cover-moderne.jpg)">
+  <div class="box"><img src="img/cover-moderne.jpg" alt="Couverture moderne" width="480" height="660"></div>
+  <div class="info">
+    <h2>VERSION COURANTE</h2>
+    <img class="shot" src="img/shot-courante.png" alt="Capture version courante" width="640" height="480">
+    <div class="links"><a class="t" href="courante-touch.html">Tactile</a><a href="courante.html">Clavier</a></div>
+  </div>
+</section>
+
+<section class="card ccpc" style="--cv:url(img/cover-cpc.jpg)">
+  <div class="box"><img src="img/cover-cpc.jpg" alt="Jaquette cassette facon Amstrad CPC" width="480" height="660"></div>
+  <div class="info">
+    <h2>AMSTRAD CPC</h2>
+    <img class="shot" src="img/shot-cpc.png" alt="Capture version CPC" width="960" height="720">
+    <div class="links"><a class="t" href="cpc-touch.html">Tactile</a><a href="cpc.html">Clavier</a></div>
+  </div>
+</section>
+<footer>Tactile = iPhone / iPad &middot; Clavier = fleches, Espace, Bas pour creuser</footer>
+</body>
+</html>
