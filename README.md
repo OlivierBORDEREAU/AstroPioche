@@ -1,3 +1,5 @@
+*[English version below](#english)*
+
 # ASTRO PIOCHE
 
 Petit jeu rétro jouable dans le navigateur. Un astronaute creuse les zones qui clignotent à la surface d'un astéroïde, tire sur les météorites, puis repart en fusée. Attraper la soucoupe bonus donne une vie en plus.
@@ -46,3 +48,54 @@ Jeu imaginé par Olivier Bordereau. Graphismes rétro réalisés avec OldGraphic
 ## Licence
 
 Ce projet est publié sous licence [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.fr). Vous pouvez le partager et le modifier à trois conditions : citer l'auteur, ne pas en faire un usage commercial et redistribuer vos modifications sous la même licence. Voir le fichier `LICENSE`.
+
+---
+
+<a id="english"></a>
+
+# ASTRO PIOCHE (English)
+
+A small retro game that runs in the browser. An astronaut digs the blinking spots on an asteroid's surface, shoots down meteorites, then flies off in a rocket. Catching the bonus flying saucer gives you an extra life.
+
+The game comes in three graphic styles, each with a keyboard version and a touch version for mobile.
+
+| Version | Keyboard | Touch |
+|---|---|---|
+| Atari 2600 | `2600.html` | `2600-touch.html` |
+| Standard (modern) | `courante.html` | `courante-touch.html` |
+| Amstrad CPC (mode 0) | `cpc.html` | `cpc-touch.html` |
+
+`index.html` lists every version, with screenshots and mock game boxes (in `img/`).
+
+## Controls
+
+**Keyboard**
+- Left/right arrows or `A`/`D`: move
+- Down arrow or `S`: dig
+- `Space`, `K` or `Enter`: fire
+- `P`: pause
+- `M`: mute or unmute sound
+
+**Touch**: the ◀ ▶ buttons are on the left, DIG (CREUSER) and FIRE (FEU) on the right. Multi-touch is supported.
+
+The high score is saved in the browser (localStorage).
+
+## Running the game
+
+Each page is a standalone HTML file with no dependencies, so you can just open it in a browser.
+
+To play from a phone on the same Wi-Fi network, serve the folder locally:
+
+```sh
+python3 -m http.server 8600
+```
+
+Then open `http://<machine-IP>:8600` on the phone. Use the IP address, because Chrome doesn't always resolve `.local` names.
+
+## Credits
+
+Game created by Olivier Bordereau. Retro graphics made with OldGraphics, including CPC assets that respect the real mode 0 limits (160×200, 16 inks from the 27-color hardware palette).
+
+## License
+
+This project is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). You may share and adapt it as long as you give credit, don't use it commercially, and distribute your changes under the same license. See the `LICENSE` file.
