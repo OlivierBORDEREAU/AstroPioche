@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<title>ASTRO PIOCHE - Amstrad CPC (tactile)</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;overscroll-behavior:none;
+    touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+  body{position:fixed;inset:0;display:flex;flex-direction:column;align-items:stretch;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);box-sizing:border-box}
+  #screen{flex:1 1 auto;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center}
+  canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block}
+  #out{display:none}
+  /* ----- Commandes tactiles facon joystick CX40 (cachees hors tactile) ----- */
+  .ctl{display:none}
+  html.touch .ctl{display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  html.touch #ctlrow{display:flex;justify-content:space-between;align-items:center;padding:8px 6px 14px}
+  #ctlrow{display:contents}
+  .grp{display:flex;gap:12px;padding:8px;border-radius:16px;background:#151515;box-shadow:inset 0 0 0 3px #262626,0 0 0 2px #0a0a0a;opacity:.9}
+  .btn{position:relative;width:76px;height:76px;border-radius:12px;background:#2b2b2b;box-shadow:inset 0 0 0 2px #3a3a3a,0 4px 0 #0c0c0c;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+  .btn.on{transform:translateY(3px);box-shadow:inset 0 0 0 2px #4a4a4a,0 1px 0 #0c0c0c;background:#353535}
+  .arrow{width:0;height:0;border:16px solid transparent}
+  #bl .arrow{border-right:24px solid #c46a2c;border-left-width:0;margin-left:-6px}
+  #br .arrow{border-left:24px solid #c46a2c;border-right-width:0;margin-right:-6px}
+  .btn.on .arrow{filter:brightness(1.35)}
+  .lbl{font:bold 9px/1 monospace;letter-spacing:1px;color:#c46a2c}
+  #bfire .lbl{color:#e6a39b}
+  .pick{width:30px;height:30px;image-rendering:pixelated}
+  #bfire{background:transparent;box-shadow:none}
+  #bfire .cap{width:62px;height:62px;border-radius:50%;background:radial-gradient(circle at 38% 34%,#e2483a,#a8160f 62%,#6e0b06);
+    box-shadow:0 5px 0 #4a0603,inset 0 -3px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center}
+  #bfire.on{transform:none;background:transparent;box-shadow:none}
+  #bfire.on .cap{transform:translateY(4px);box-shadow:0 1px 0 #4a0603,inset 0 -3px 6px rgba(0,0,0,.4);filter:brightness(1.2)}
+  @media (orientation:landscape){
+    html.touch body{flex-direction:row;align-items:center}
+    html.touch #ctlrow{display:contents}
+    html.touch #padwrap{order:0;padding:0 8px 0 10px} html.touch #screen{order:1;align-self:stretch} html.touch #firewrap{order:2;padding:0 10px 0 8px}
+  }
+</style>
+</head>
+<body>
+<div id="screen"><canvas id="c"></canvas></div>
+<div id="ctlrow">
+  <div id="padwrap" class="ctl"><div id="lgrp" class="grp"><div id="bl" class="btn" aria-label="gauche"><div class="arrow"></div></div><div id="br" class="btn" aria-label="droite"><div class="arrow"></div></div></div></div>
+  <div id="firewrap" class="ctl"><div id="rgrp" class="grp"><div id="bdig" class="btn" aria-label="creuser"><svg class="pick" viewBox="0 0 10 10" shape-rendering="crispEdges"><path fill="#9a9a9a" d="M1 2h2v1h1v1h1v1h1V4h1V3h1V2h-1V1H4v1H1z"/><path fill="#c46a2c" d="M5 5h1v1h1v1h1v1h1v1H8V8H7V7H6V6H5z"/></svg><span class="lbl">CREUSER</span></div><div id="bfire" class="btn" aria-label="feu"><div class="cap"><span class="lbl">FEU</span></div></div></div></div>
+</div>
+<pre id="out"></pre>
+<script>
+"use strict";
+/* =====================================================================================
+   ASTRO PIOCHE — Amstrad CPC edition (browser engine emulating real CPC constraints)
+   - Mode 0: 160x200 framebuffer of PEN numbers (0-15), 2 px per byte, 2:1 wide pixels
+   - 16 pens mapped to inks of the 27-colour hardware palette, border ink
+   - Raster splits: pens re-inked per scanline band (from palette.json raster_splits)
+   - Software sprites: masked on pen index (pen 0 = transparent), x snapped to byte
+     boundaries (2 px), background restored behind them via dirty rectangles
+   - AY-3-8912: 3 tone channels + noise + envelope, register-level, 50 Hz driver
+   Graphics come from assets/ (OldGraphics) and are inlined by build.py as base64 PNGs;
+   indexed PNGs are decoded here to their exact pen indices. Missing assets -> placeholders.
+   ===================================================================================== */
+const ASSETS = {"files":{"astronaut_left.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAAAQBAMAAABzZ+XyAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAAR9JREFUeJxdkb9KBDEQh7+Nwq5/kLlKCwsfwEJIYXul4MOYq3blhE067fI4lj6Ay72ClbDdIhzk8Dwtkr0NDnxkfpPfJCQDdU3OOzFOx1oKVYHJmU8GU4HZG1l15NhksKsObvV0IjvIsanhewds53vjIZpNjn1NTZoNXQc1LwAqCD7nSWvQmkeirsobA6DKgWVOEDzCCUTN9UG8evELOeXAcjtARdR06TFBIGcBFEz6Ae4BlAefEwTuBE/SBbzF74F1jgf/T6fJ9ELVCzCurMfaqOEDBdB6F0dV9ePmFIX4s+Mro/YFN9A+n6cpTDNuA+bL1F61YAYoaWEA04K5FCdtygtxF80PjXLi5Igww82Y4cSJk08bbMycNDY0IoX8AT6Xj43sgnJ5AAAAAElFTkSuQmCC","astronaut_right.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAAAQBAMAAABzZ+XyAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAATBJREFUeJxV0TGKFEEUxvHfaweqNpGZaBMDjyDMBTzCnMAbCCMGvWZlIOtGgzfwCBsIY7hoJNjgEeYCk4iwVSC0Qe+sPVX8eXwfX9WrR9H3zuAn6Pu7Bw26RJmj7//oewmJ8hg0HM1J5EQxHLP12/83cnDGcKyGIw63FnePwYU1ZzhkDs+s8cOF3g0smihmpLWv1jQ+EiU9eX1R0O2N2zlNlFthj71x68X30xtdztkbt4z3pokvDcMpeN764cDypL9wD12jzSFKEx8aGu0vS+g2mNNocz1ZdGJXJhC7sjHVExt4Og0j5VbBrkyh2WqxlH5/PnSPzph5866a/vjlyU5KbX163iXqlpEqMSZq5PiWqIn6Psfy2q/rLnLkVfHJKotsFTlyLfVV5GlflXoVy4h/mL6ANIziRysAAAAASUVORK5CYII=","background.png":"data:image/png;base64,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","dig_zone.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAAAFBAMAAABIj/TiAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAAKVJREFUeJw1xCEOwgAMQNHfCZJN0F4DwzWwM0BwU5CgsFwABGYGM4UlHIHLcISWZJssAnjiyfQFvOe/Hyz/X4DF91kLjMcWGOXpKq5ukRbmWzp1W3MPWwF33wHdpAHK8wGoirRIC3EV1zSwEAfXBAgBUAAEgCwiLdJUXMUjIU0FxAPAFMAdAAOgaCIt+lrFdWjiVkVfa1vq0LRQ9fUNymEPcN0AnD6uZEvpDUf1XgAAAABJRU5ErkJggg==","explosion.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAQBAMAAADzFNLhAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAAK9JREFUeJxdzqsSQVEYhuF31pix9iIgOSSyKLsFl+AOjKj5NdoaTft1gUwwqp1cgGAGoyDt2RJhj8P42vOlF5Ip4LG8uUQF/yaZcA4WDRK61XWrjiFiIISIRzUX2byIIVtbMyt4yn5wKzrDZlSnDZy6z949MgAsSowrdoCVxK0znWPcJ5YUzcOOKWnKehnmAiAEVtct2IlgoAGOPWrjm+hPn7ffYF2i4JDPAQgB/3sB/5A3IQl+MoIAAAAASUVORK5CYII=","font.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAAAYBAMAAADAJejWAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAAYhJREFUeJyllLFu5DAMRF+MAPOt203Hb1DHLt863RWSbTmbwwEXLQzK4poccob6oBjo1RRDJk1NK09bDNYj31YmXybIMuVpKVAhAwUg//0HMhxgaEgDCpgZJABu3lYeZwc6t24iFMhoowKFyJ0znbaAmmgPWGcK0EZ4JTJulDZjQUz7BjIgg4PcAGTIoHX/7XbeqR/eI3JjIcpZEBfsa0/l/Haey43qLc1/rqpFZYFqo2jtqlAVm7WqLjIPnY3pQOir3lWq0ibt245O31Qe33ldAlj7fxdwoPKzsXu8da4LVUf1LcDk9/2jNBfFGaukwNi0MEvYEBvIjnsLHPrpmxQfOeFb5FLjzfGtBwxt1aaPDr9fjxGtH9R1DhJr3J89fPYgo++Xt1huFDh7uEr/BIg8kAd4/AjzPPaAiHlzgV5fr0/k0C/o11NEk7lJ8ODhW6y65fE5I3/LBFDp7Hg2n0y6X02/ZgnKl3tPUpuydpH17MMV2HBkV8s+42dDr6Fiiuy8W7Juq9+uPy+Z7Snl1WLGAAAAAElFTkSuQmCC","hole.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAGBAMAAAAFwGKyAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAACtJREFUeJwFwcERABAMALDUdQBGMpk5DGcHT79KHDiZAzOio1rBbR4L9uYDm44HwleCvLYAAAAASUVORK5CYII=","life_icon.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAYAAAAGBAMAAAAS4vJ7AAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAACBJREFUeJxjYChnYGJnKGDJPc/IxPCPgZG94CcDQzkDADcZBRrpG4aAAAAAAElFTkSuQmCC","meteor_big.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAKBAMAAAByAqLJAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAAEhJREFUeJwFwbERgCAQRcHHlzGhCC2BTqjB9oicIYMmKOEiYxvwZBcGDJRyT1tXgzsjpjGJnwcHIQyi6/gxvYYcXedTtEOFygK3FRQXCN7z9wAAAABJRU5ErkJggg==","meteor_small.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGBAMAAAAMK8LIAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAACdJREFUeJxj4N7AvYFx3x9GfSaGBw8YmP4yMFxg+aDwkYGBawHXAgCcuwpMV+QajgAAAABJRU5ErkJggg==","rocket_idle.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAgBAMAAADZK/TeAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAAF9JREFUeJx9yrENwjAURdHDhyK4o0yXHbxQRmANumQD1+ziHdggXagQNCYFQmmerp4O7oRkEiAUfeuT6rD9r0owEDwIx2yT2fvH7+0fnzC1Ljh//XzpxOrm2p7R4gl8AKGWEDSihSziAAAAAElFTkSuQmCC","rocket_takeoff.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAsBAMAAACXjoX+AAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAAL9JREFUeJydzTFOw0AUhOEvG4pkIyGlTJc7+EI+Qq6RzrnB1rHEBeAG4CtE7pFYqk0VTGEBdoGQeMXozWj0D85wJogaokbwfUGyI9lN0zudBZ3FvHvrcOsI7GFPoIeeYFlhWZnDKgOV4Vfuv96/uRFNRDNNE9YJ6xn3tF1x2q6E4uhQHB2mhVp2rWXXScr9Sz9K8NH2PLSveHp7HmXsRqQgX7KSL7kOauVreMjv1IqgqI1e3CQ8ghZRwiibn/nEJ+oRQqCFOj5GAAAAAElFTkSuQmCC","saucer.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAIBAMAAAARjyJQAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAAE1JREFUeJxFxLEJgDAQQNGfg0uro90I2mQON3Aa93CDtDZCSiHIWVzAVzygFIiFPLMQC2sjM57c3VssN9vLfnE+1OT8khrQDwM6qKmNP4FHG1wWlwtAAAAAAElFTkSuQmCC","shot.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAAEBAMAAABWwfMKAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAABBJREFUeJxjOMf0j+EN038ADnMDvMc/CIIAAAAASUVORK5CYII=","zone_pip.png":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAYAAAAEBAMAAABfKlNwAAAAMFBMVEUAAAAAAAAAAIAAAP8AAP+AAP+A//////+AgICAAAD/AAD/gAD//wCAgAD//4D/AP9eTsgaAAAAAXRSTlMAQObYZgAAABNJREFUeJxjTGM2YGJgYGBigAAACNwAn+IIYDsAAAAASUVORK5CYII="},"palette":{"format":"Amstrad CPC Mode 0, 160x200, 16 pens; RGB is the firmware convention (components 0/128/255)","transparent_pen":0,"pens":[{"pen":0,"firmware":0,"name":"Black","rgb":[0,0,0],"role":"transparent key for sprites; plain black in background/HUD"},{"pen":1,"firmware":0,"name":"Black","rgb":[0,0,0],"role":"opaque black (holes, dug pits, visor rim) - same ink as pen 0, different role"},{"pen":2,"firmware":1,"name":"Blue","rgb":[0,0,128],"role":"SKY_A - raster-split pen (sky gradient dark component); not used by sprites"},{"pen":3,"firmware":2,"name":"Bright Blue","rgb":[0,0,255],"role":"SKY_B - raster-split pen (sky gradient light component); not used by sprites"},{"pen":4,"firmware":2,"name":"Bright Blue","rgb":[0,0,255],"role":"bright blue: visor, HUD rules"},{"pen":5,"firmware":5,"name":"Mauve","rgb":[128,0,255],"role":"mauve: far ridges, saucer underside"},{"pen":6,"firmware":23,"name":"Pastel Cyan","rgb":[128,255,255],"role":"pastel cyan: highlights, stars, ridge rim, saucer dome"},{"pen":7,"firmware":26,"name":"Bright White","rgb":[255,255,255],"role":"bright white: suit, rocket body, font"},{"pen":8,"firmware":13,"name":"White","rgb":[128,128,128],"role":"grey: suit/rocket shading, smoke, moon"},{"pen":9,"firmware":3,"name":"Red","rgb":[128,0,0],"role":"dark red: shadows, craters, meteor pits"},{"pen":10,"firmware":6,"name":"Bright Red","rgb":[255,0,0],"role":"bright red: rocket nose/fins, zone blink B, flame"},{"pen":11,"firmware":15,"name":"Orange","rgb":[255,128,0],"role":"orange: meteors, backpack, zone blink A, ground"},{"pen":12,"firmware":24,"name":"Bright Yellow","rgb":[255,255,0],"role":"bright yellow: shots, pickaxe, flame core, score"},{"pen":13,"firmware":12,"name":"Yellow","rgb":[128,128,0],"role":"yellow (olive): ground deep bands, planet ring"},{"pen":14,"firmware":25,"name":"Pastel Yellow","rgb":[255,255,128],"role":"pastel yellow: ground crust, highlights"},{"pen":15,"firmware":8,"name":"Bright Magenta","rgb":[255,0,255],"role":"bright magenta: saucer hull, HUD accent"}],"png_palette_note":"Every PNG carries this exact 16-entry PLTE in pen order (pens 2/3 stored with their first sky-band inks: Blue, Bright Blue). Pens 0 and 1 share the ink Black: use the pen index, never the RGB, to decide transparency.","raster_splits":{"pens_changed":[2,3],"note":"Gate-array ink changes timed from the frame flyback (halt on the 300 Hz interrupt, then a delay loop to the exact line). 6 ink-change points per frame, 2 OUTs each. Sprites never use pens 2/3, so they keep their colours across splits.","bands":[{"y0":0,"y1":15,"inks":{"2":0,"3":0},"note":"top HUD"},{"y0":16,"y1":55,"inks":{"2":1,"3":2},"note":"high sky: blue / bright blue"},{"y0":56,"y1":95,"inks":{"2":1,"3":5},"note":"mid sky: blue / mauve"},{"y0":96,"y1":127,"inks":{"2":4,"3":1},"note":"low sky: magenta / blue"},{"y0":128,"y1":149,"inks":{"2":4,"3":0},"note":"horizon: magenta / black (ridges use pen 2 here)"},{"y0":150,"y1":199,"inks":{"2":0,"3":0},"note":"ground + bottom HUD (pens 2/3 unused)"}]},"border_ink":1},"sprites":{"screen":{"w":160,"h":200,"mode":0,"pixel_aspect":"2:1 (display each pixel 2x wider than tall, e.g. 4x2)","ground_y":150,"playfield_y":[16,187],"hud_top_y":[0,15],"hud_bottom_y":[188,199]},"palette":"palette.json","transparent_pen":0,"background":{"name":"background","file":"background.png","w":160,"h":200,"opaque":true,"note":"Sky (pens 2/3 raster-split), planet, moon, ridges, ground (crust row y=150..151), empty HUD bars. Stars are baked; engine may twinkle by toggling pixels."},"sprites":[{"name":"astronaut_right","file":"astronaut_right.png","frame_w":8,"frame_h":16,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":10,"frames":["stand","walk1","walk2","walk3","dig1","dig2","shoot","death1","death2","death3"],"transparent_pen":0,"anchor":{"x":0,"y":16,"meaning":"frame drawn at (astro.x, ground_y-16): left edge = astro.x, bottom edge on ground_y"},"note":"Facing right. walk cycle walk1,walk2,walk3,walk2 at 8 fps; dig1/dig2 alternate at 8 fps; shoot held for pose time (gun tip at frame x=6,y=0); death1->death3 at 6 fps then hold.","anims":{"stand":["stand"],"walk":["walk1","walk2","walk3","walk2"],"dig":["dig1","dig2"],"shoot":["shoot"],"death":["death1","death2","death3"]},"fps":{"walk":8,"dig":8,"death":6},"suggested_hitbox":{"x":1,"y":4,"w":6,"h":12}},{"name":"astronaut_left","file":"astronaut_left.png","frame_w":8,"frame_h":16,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":10,"frames":["stand","walk1","walk2","walk3","dig1","dig2","shoot","death1","death2","death3"],"transparent_pen":0,"anchor":{"x":0,"y":16,"meaning":"same as right"},"note":"Exact mirror of astronaut_right (gun tip at x=1).","anims":{"stand":["stand"],"walk":["walk1","walk2","walk3","walk2"],"dig":["dig1","dig2"],"shoot":["shoot"],"death":["death1","death2","death3"]},"fps":{"walk":8,"dig":8,"death":6}},{"name":"meteor_big","file":"meteor_big.png","frame_w":6,"frame_h":10,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":2,"frames":["a","b"],"transparent_pen":0,"anchor":{"x":3,"y":5,"meaning":"centre"},"fps":6,"note":"Tumble frames. Engine draws the trail (pens 9/10/11/12) behind it.","suggested_hitbox":{"x":0,"y":1,"w":6,"h":8}},{"name":"meteor_small","file":"meteor_small.png","frame_w":4,"frame_h":6,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":2,"frames":["a","b"],"transparent_pen":0,"anchor":{"x":2,"y":3,"meaning":"centre"},"fps":6,"suggested_hitbox":{"x":0,"y":0,"w":4,"h":6}},{"name":"explosion","file":"explosion.png","frame_w":10,"frame_h":16,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":3,"frames":["flash","fireball","smoke"],"transparent_pen":0,"anchor":{"x":5,"y":8,"meaning":"centre"},"fps":10,"note":"Play once; also usable for the astronaut death and the saucer."},{"name":"saucer","file":"saucer.png","frame_w":12,"frame_h":8,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":2,"frames":["lights_a","lights_b"],"transparent_pen":0,"anchor":{"x":0,"y":0,"meaning":"top-left"},"fps":4,"suggested_hitbox":{"x":0,"y":3,"w":12,"h":5}},{"name":"rocket_idle","file":"rocket_idle.png","frame_w":10,"frame_h":32,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":1,"frames":["idle"],"transparent_pen":0,"anchor":{"x":0,"y":32,"meaning":"bottom-left; bottom edge on ground_y"}},{"name":"rocket_takeoff","file":"rocket_takeoff.png","frame_w":10,"frame_h":44,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":2,"frames":["flame_a","flame_b"],"transparent_pen":0,"anchor":{"x":0,"y":32,"meaning":"rows 0..31 = rocket body (same as idle), rows 32..43 = flame; place row 32 at rocket base y"},"fps":12},{"name":"dig_zone","file":"dig_zone.png","frame_w":12,"frame_h":5,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":8,"frames":["p0_A","p0_B","p1_A","p1_B","p2_A","p2_B","p3_A","p3_B"],"transparent_pen":0,"anchor":{"x":0,"y":1,"meaning":"frame drawn at (zone.x, ground_y-1)"},"note":"frame index = 2*progress_step + blink. progress_step = 0 (untouched), 1 (<1/3), 2 (<2/3), 3 (almost done). blink A=orange, B=red; 5 fps normally, 16 fps when the zone is about to expire.","index_formula":"2*step + (blink?1:0)","fps":{"normal":5,"expiring":16}},{"name":"hole","file":"hole.png","frame_w":12,"frame_h":6,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":1,"frames":["hole"],"transparent_pen":0,"anchor":{"x":0,"y":1,"meaning":"frame drawn at (hole.x, ground_y-1)"}},{"name":"shot","file":"shot.png","frame_w":1,"frame_h":4,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":2,"frames":["a","b"],"transparent_pen":0,"anchor":{"x":0,"y":0,"meaning":"top = bullet position"},"fps":12},{"name":"life_icon","file":"life_icon.png","frame_w":6,"frame_h":6,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":1,"frames":["helmet"],"transparent_pen":0,"anchor":{"x":0,"y":0,"meaning":"top-left"},"note":"HUD life counter, top HUD bar (e.g. y=4)."},{"name":"zone_pip","file":"zone_pip.png","frame_w":3,"frame_h":4,"layout":"horizontal strip, frame i at x=i*frame_w","frame_count":2,"frames":["done","todo"],"transparent_pen":0,"anchor":{"x":0,"y":0,"meaning":"top-left"},"note":"HUD zone gauge, 10 pips at 4 px pitch. No green ink in this palette: done = pastel cyan, todo = dark red."}],"font":{"name":"font","file":"font.png","cell_w":8,"cell_h":8,"columns":16,"rows":3,"chars":"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ .:-!'/()=+x","ink_pen":7,"transparent_pen":0,"note":"Cell i at x=(i%16)*8, y=(i//16)*8. Glyphs drawn in pen 7 (bright white); recolour by mapping pen 7 to the wanted pen at blit time. 20 characters per line on the 160-px screen. 'x' is the lowercase multiply sign (x3)."}}};
+
+// ------------------------------------------------------------------ hardware constants
+const W = 160, H = 200, BL = 16, BT = 36, TW = W + 2 * BL, TH = H + 2 * BT;
+const HZ = 50, STEP = 1 / HZ;
+const HWRGB = ['000000','000080','0000FF','800000','800080','8000FF','FF0000','FF0080','FF00FF',
+               '008000','008080','0080FF','808000','808080','8080FF','FF8000','FF8080','FF80FF',
+               '00FF00','00FF80','00FFFF','80FF00','80FF80','80FFFF','FFFF00','FFFF80','FFFFFF'];
+const HW32 = HWRGB.map(h => { const v = parseInt(h, 16); return (255 << 24) | ((v & 255) << 16) | (((v >> 8) & 255) << 8) | (v >> 16); });
+const HWC = HWRGB.map(h => [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]);
+
+// ------------------------------------------------------------------ pens (roles follow assets/palette.json)
+const T = 0, K = 1, SKYA = 2, SKYB = 3, BB = 4, MV = 5, PC = 6, BW = 7, GR = 8, DR = 9, BR = 10, OR = 11, BY = 12, OL = 13, PY = 14, BM = 15;
+let INKS = [0, 0, 1, 2, 2, 5, 23, 26, 13, 3, 6, 15, 24, 12, 25, 8];   // firmware ink per pen
+let BORDER = 1;
+let RASTER_BANDS = [   // default = OldGraphics' split table
+  { y0: 0, y1: 15, inks: { 2: 0, 3: 0 } }, { y0: 16, y1: 55, inks: { 2: 1, 3: 2 } }, { y0: 56, y1: 95, inks: { 2: 1, 3: 5 } },
+  { y0: 96, y1: 127, inks: { 2: 4, 3: 1 } }, { y0: 128, y1: 149, inks: { 2: 4, 3: 0 } }, { y0: 150, y1: 199, inks: { 2: 0, 3: 0 } }];
+let LINE_INKS = null;   // per-line firmware ink for each pen, built from bands (+ title rainbow)
+
+// ------------------------------------------------------------------ canvas / framebuffer
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+cv.width = TW; cv.height = TH;
+const IMG = ctx.createImageData(TW, TH), OUT32 = new Uint32Array(IMG.data.buffer);
+// Detection tactile (avant fit pour que la mise en page tienne compte des commandes)
+const IS_TOUCH = (matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+if (IS_TOUCH) document.documentElement.classList.add('touch');
+function fit() {
+  const sc = document.getElementById('screen'), r = sc.getBoundingClientRect();
+  const aw = Math.max(1, r.width), ah = Math.max(1, r.height);
+  // aspect 4:3 du tube ; agrandissement plus-proche-voisin (pixelated). Si un multiple entier de 160 tient sans trop retrecir, on l'utilise.
+  let w = aw, h = w * 3 / 4;
+  if (h > ah) { h = ah; w = h * 4 / 3; }
+  const k = Math.floor(w / W); if (k >= 1 && k * W >= 0.85 * w) { w = k * W; h = w * 3 / 4; }   // entier si on perd <15 %, sinon plus-proche-voisin
+  cv.style.width = Math.floor(w) + 'px'; cv.style.height = Math.floor(h) + 'px';
+}
+addEventListener('resize', fit); addEventListener('orientationchange', () => setTimeout(fit, 150)); fit();
+const FB = new Uint8Array(W * H);       // screen memory (pen per pixel)
+const BG = new Uint8Array(W * H);       // background used to restore behind sprites
+const BASE = new Uint8Array(W * H);     // pristine background image
+const STATS = { dirtyMax: 0, spritesMax: 0, restoredPx: 0, mismatches: 0, checks: 0, transparentLeaks: 0 };
+
+// ------------------------------------------------------------------ indexed PNG decoder (exact pen indices)
+async function decodePNG(url) {
+  const bin = Uint8Array.from(atob(url.split(',')[1]), c => c.charCodeAt(0));
+  const u32 = o => ((bin[o] << 24) | (bin[o + 1] << 16) | (bin[o + 2] << 8) | bin[o + 3]) >>> 0;
+  let p = 8, w = 0, h = 0, bd = 8, ct = 3, plte = null; const idat = [];
+  while (p < bin.length) {
+    const len = u32(p), type = String.fromCharCode(bin[p + 4], bin[p + 5], bin[p + 6], bin[p + 7]), d = bin.subarray(p + 8, p + 8 + len);
+    if (type === 'IHDR') { w = u32(p + 8); h = u32(p + 12); bd = d[8]; ct = d[9]; if (d[12]) throw new Error('interlaced PNG'); }
+    else if (type === 'PLTE') plte = d;
+    else if (type === 'IDAT') idat.push(d);
+    else if (type === 'IEND') break;
+    p += 12 + len;
+  }
+  const raw = new Uint8Array(await new Response(new Blob(idat).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer());
+  const ch = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[ct], bpp = Math.max(1, (ch * bd) >> 3), stride = Math.ceil(w * ch * bd / 8);
+  const out = new Uint8Array(stride * h);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)], src = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)), o = y * stride;
+    for (let x = 0; x < stride; x++) {
+      const a = x >= bpp ? out[o + x - bpp] : 0, b = y ? out[o - stride + x] : 0, c = (y && x >= bpp) ? out[o - stride + x - bpp] : 0;
+      let v = src[x];
+      if (f === 1) v += a; else if (f === 2) v += b; else if (f === 3) v += (a + b) >> 1;
+      else if (f === 4) { const pp = a + b - c, pa = Math.abs(pp - a), pb = Math.abs(pp - b), pc = Math.abs(pp - c); v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c); }
+      out[o + x] = v & 255;
+    }
+  }
+  const pen = new Uint8Array(w * h);
+  if (ct === 3) {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const bit = x * bd, byte = out[y * stride + (bit >> 3)];
+      pen[y * w + x] = bd === 8 ? byte : (byte >> (8 - bd - (bit & 7))) & ((1 << bd) - 1);
+    }
+  } else {   // non-indexed fallback: nearest pen by RGB
+    const rgb = INKS.map(f => HWC[f]);
+    for (let i = 0; i < w * h; i++) {
+      const r = out[i * bpp], g = out[i * bpp + 1], b2 = out[i * bpp + 2], al = ch === 4 ? out[i * bpp + 3] : 255;
+      if (al < 128) { pen[i] = 0; continue; }
+      let best = 1, bd2 = 1e9; for (let k = 1; k < 16; k++) { const c = rgb[k], dd = (c[0] - r) ** 2 + (c[1] - g) ** 2 + (c[2] - b2) ** 2; if (dd < bd2) { bd2 = dd; best = k; } }
+      pen[i] = best;
+    }
+  }
+  return { w, h, pen };
+}
+
+// ------------------------------------------------------------------ placeholder graphics (used only if an asset is missing)
+const CH = { '.': -1, k: K, w: BW, g: GR, c: PC, b: BB, R: BR, r: DR, o: OR, y: BY, p: PY, Y: OL, m: MV, P: BM };
+function sp(rows) {
+  const h = rows.length, w = Math.max(...rows.map(r => r.length)), d = new Int16Array(w * h).fill(-1);
+  rows.forEach((r, y) => { for (let x = 0; x < r.length; x++) d[y * w + x] = CH[r[x]] ?? -1; });
+  return { w, h, d };
+}
+const PH_ASTRO = ["..wwww..", ".wwwwwg.", ".wbbbbg.", ".wcbbbg.", ".wwwwwg.", "owwwwww.", "owwwwwgw", "owwwwg.w", "o.wwwg..", "..wwwg..", "..wggw..", "..ww.w..", "..ww.w..", "..ww.w..", ".www.ww.", ".ggg.gg."];
+const PH = {
+  astronaut_right: { frames: Array(10).fill(sp(PH_ASTRO)), names: ['stand', 'walk1', 'walk2', 'walk3', 'dig1', 'dig2', 'shoot', 'death1', 'death2', 'death3'] },
+  astronaut_left: { frames: Array(10).fill(sp(PH_ASTRO.map(r => [...r].reverse().join('')))), names: ['stand', 'walk1', 'walk2', 'walk3', 'dig1', 'dig2', 'shoot', 'death1', 'death2', 'death3'] },
+  meteor_big: { frames: [sp(["..oo..", ".oooo.", "ooRpoo", "oorooo", "oooooo", "orooRo", "oooooo", ".oroo.", ".oooo.", "..oo.."])], meta: { anchor: { x: 3, y: 5 }, suggested_hitbox: { x: 0, y: 1, w: 6, h: 8 } } },
+  meteor_small: { frames: [sp([".oo.", "opoo", "oorR", "oooo", "oroo", ".oo."])], meta: { anchor: { x: 2, y: 3 } } },
+  explosion: { frames: [sp(["....yy....", "..y.oo.y..", ".yoRyyRoy.", "..oyRRyo..", ".yoRyyRoy.", "..y.oo.y..", "....yy...."])], meta: { anchor: { x: 5, y: 3 } } },
+  saucer: { frames: [sp(["....cccc....", "...cccccc...", ".PPPPPPPPPP.", "PPyPPyPPyPPP", ".PPPPPPPPPP.", "...mm..mm..."])], meta: { suggested_hitbox: { x: 0, y: 2, w: 12, h: 4 } } },
+  rocket_idle: { frames: [sp(Array(8).fill("...RR.....").concat(Array(20).fill("..wwwwww..")).concat(Array(4).fill("RRRggggRRR")))] },
+  rocket_takeoff: { frames: [sp(Array(8).fill("...RR.....").concat(Array(20).fill("..wwwwww..")).concat(Array(4).fill("RRRggggRRR")).concat(Array(12).fill("...yooy...")))] },
+  dig_zone: { frames: [0, 1, 2, 3, 4, 5, 6, 7].map(i => sp([".pppppppppp.", "oooooooooooo", "oooooooooooo", ".oooooooooo.", "..oooooooo.."].map(r => r.replace(/o/g, i & 1 ? 'R' : 'o').slice(0, 12 - (i >> 1) * 3).padEnd(12, '.')))) },
+  hole: { frames: [sp(["Y.kkkkkkkk.Y", ".kkkkkkkkkk.", "..kkkkkkkk..", "...kkkkkk...", "....kkkk....", "............"])] },
+  shot: { frames: [sp(["p", "y", "y", "o"])] },
+  life_icon: { frames: [sp([".www..", "wbbbw.", "wbbbw.", ".www..", "w...w.", "......"])] },
+  zone_pip: { frames: [sp(["ccc", "ccc", "ccc", "..."]), sp(["rrr", "rrr", "rrr", "..."])] },
+};
+const F5 = {A:'0111010001100011111110001100011000110001',B:'1111010001100011111010001100011111000000',C:'0111010001100001000010000100010111000000',D:'1111010001100011000110001100011111000000',E:'1111110000100001111010000100001111100000',F:'1111110000100001111010000100001000000000',G:'0111010001100001011110001100010111100000',H:'1000110001100011111110001100011000100000',I:'0111000100001000010000100001000111000000',J:'0011100010000100001000010100100110000000',K:'1000110010101001100010100100101000100000',L:'1000010000100001000010000100001111100000',M:'1000111011101011010110001100011000100000',N:'1000110001110011010110011100011000100000',O:'0111010001100011000110001100010111000000',P:'1111010001100011111010000100001000000000',Q:'0111010001100011000110101100100110100000',R:'1111010001100011111010100100101000100000',S:'0111110000100000111000001000011111000000',T:'1111100100001000010000100001000010000000',U:'1000110001100011000110001100010111000000',V:'1000110001100011000110001010100010000000',W:'1000110001100011010110101101010101000000',X:'1000110001010100010001010100011000100000',Y:'1000110001010100010000100001000010000000',Z:'1111100001000100010001000100001111100000',
+ '0':'0111010001100111010111001100010111000000','1':'0010001100001000010000100001000111000000','2':'0111010001000010001000100010001111100000','3':'1111100010001000001000001100010111000000','4':'0001000110010101001011111000100001000000','5':'1111110000111100000100001100010111000000','6':'0011001000100001111010001100010111000000','7':'1111100001000100010001000010000100000000','8':'0111010001100010111010001100010111000000','9':'0111010001100010111100001000100110000000',
+ ' ':'0000000000000000000000000000000000000000','!':'0010000100001000010000100000000010000000','-':'0000000000000001111100000000000000000000','=':'0000000000111110000011111000000000000000','+':'0000000100001001111100100001000000000000',':':'0000001100011000000001100011000000000000','.':'0000000000000000000000000011000110000000',"'":'0010000100010000000000000000000000000000','/':'0000100010000100010001000010001000000000','x':'0000000000100010101000100010101000100000','(':'0001000100010000100000100000100000000000',')':'0100000100000100001000100010001000000000'};
+let FONT = { w: 8, h: 8, glyph: {} };
+for (const k in F5) { const g = new Uint8Array(64); for (let r = 0; r < 8; r++) for (let c = 0; c < 5; c++) if (F5[k][r * 5 + c] === '1') g[r * 8 + c + 1] = 1; FONT.glyph[k] = g; }
+let SPR = {};
+for (const k in PH) SPR[k] = { frames: PH[k].frames, names: PH[k].names || [], meta: PH[k].meta || {}, src: 'placeholder' };
+let BG_IMAGE = null;
+const ASSET_REPORT = { palette: 'placeholder', raster: 'default', background: 'placeholder (procedural)', font: 'placeholder', sprites: {} };
+
+// ------------------------------------------------------------------ asset loading (OldGraphics' palette.json / sprites.json contract)
+async function loadAssets() {
+  const A = ASSETS || {}, files = A.files || {};
+  const pal = A.palette;
+  if (pal && pal.pens) {
+    pal.pens.forEach(p => { if (p.pen >= 0 && p.pen < 16) INKS[p.pen] = p.firmware; });
+    if (pal.border_ink != null) BORDER = pal.border_ink;
+    if (pal.raster_splits && pal.raster_splits.bands) { RASTER_BANDS = pal.raster_splits.bands; ASSET_REPORT.raster = 'palette.json (' + RASTER_BANDS.length + ' bands)'; }
+    ASSET_REPORT.palette = 'palette.json';
+  }
+  const S = A.sprites || {}, cache = {};
+  const img = async f => { if (!files[f]) throw new Error('missing ' + f); return cache[f] || (cache[f] = await decodePNG(files[f])); };
+  const cut = (im, x0, y0, w, h, tp) => {
+    const d = new Int16Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = im.pen[(y0 + y) * im.w + x0 + x]; d[y * w + x] = v === tp ? -1 : v; }
+    return { w, h, d };
+  };
+  const tpGlobal = S.transparent_pen ?? 0;
+  for (const e of (Array.isArray(S.sprites) ? S.sprites : [])) {
+    try {
+      const im = await img(e.file), fw = e.frame_w || im.w, fh = e.frame_h || im.h, n = e.frame_count || 1, tp = e.transparent_pen ?? tpGlobal;
+      const frames = []; for (let i = 0; i < n; i++) frames.push(cut(im, i * fw, 0, fw, fh, tp));
+      SPR[e.name] = { frames, names: e.frames || [], meta: e, src: e.file };
+      ASSET_REPORT.sprites[e.name] = e.file + ' (' + n + 'x ' + fw + 'x' + fh + ')';
+    } catch (err) { ASSET_REPORT.sprites[e.name] = 'ERROR ' + err.message; }
+  }
+  if (S.background && files[S.background.file]) {
+    try { const im = await img(S.background.file); BG_IMAGE = im; ASSET_REPORT.background = S.background.file + ' ' + im.w + 'x' + im.h; }
+    catch (err) { ASSET_REPORT.background = 'ERROR ' + err.message; }
+  }
+  const f = S.font;
+  if (f && files[f.file]) {
+    try {
+      const im = await img(f.file), cw = f.cell_w || 8, chh = f.cell_h || 8, cols = f.columns || Math.floor(im.w / cw), tp = f.transparent_pen ?? 0;
+      FONT = { w: cw, h: chh, glyph: Object.assign({}, FONT.glyph) };   // keep placeholder glyphs for chars the sheet lacks
+      [...f.chars].forEach((c, i) => {
+        const g = new Uint8Array(cw * chh), x0 = (i % cols) * cw, y0 = Math.floor(i / cols) * chh;
+        for (let y = 0; y < chh; y++) for (let x = 0; x < cw; x++) g[y * cw + x] = im.pen[(y0 + y) * im.w + x0 + x] !== tp ? 1 : 0;
+        FONT.glyph[c] = g;
+      });
+      ASSET_REPORT.font = f.file + ' (' + f.chars.length + ' glyphs, pen ' + (f.ink_pen ?? 7) + ' recoloured at blit)';
+    } catch (err) { ASSET_REPORT.font = 'ERROR ' + err.message; }
+  }
+}
+const spr = (name, i = 0) => { const s = SPR[name]; return s ? s.frames[Math.max(0, Math.min(s.frames.length - 1, i))] : null; };
+const frameIdx = (name, fname) => { const s = SPR[name]; const i = s && s.names ? s.names.indexOf(fname) : -1; return i < 0 ? 0 : i; };
+const hitbox = (name, def) => (SPR[name] && SPR[name].meta && SPR[name].meta.suggested_hitbox) || def;
+const animFrames = (name, anim, fallback) => { const m = SPR[name] && SPR[name].meta && SPR[name].meta.anims; return (m && m[anim]) || fallback; };
+const fpsOf = (name, key, def) => { const f = SPR[name] && SPR[name].meta && SPR[name].meta.fps; return typeof f === 'number' ? f : (f && f[key]) || def; };
+
+// ------------------------------------------------------------------ drawing primitives
+function px(buf, x, y, pen) { if (x >= 0 && x < W && y >= 0 && y < H) buf[y * W + x] = pen; }
+function fillRect(buf, x, y, w, h, pen) { for (let yy = Math.max(0, y); yy < Math.min(H, y + h); yy++) buf.fill(pen, yy * W + Math.max(0, x), yy * W + Math.min(W, x + w)); }
+function blit(buf, s, x, y, cx0 = 0, cx1 = W) { if (!s) return; for (let r = 0; r < s.h; r++) for (let c = 0; c < s.w; c++) { const v = s.d[r * s.w + c]; if (v >= 0 && x + c >= cx0 && x + c < cx1) px(buf, x + c, y + r, v); } }
+function text(buf, x, y, str, pen, sy = 1) {   // font glyphs are pen-7 masks: recoloured to `pen` at blit time
+  const f = FONT;
+  for (let i = 0; i < str.length; i++) {
+    const g = f.glyph[str[i]] || f.glyph[str[i].toUpperCase()] || f.glyph[' ']; if (!g) continue;
+    for (let r = 0; r < f.h; r++) for (let c = 0; c < f.w; c++) if (g[r * f.w + c]) for (let k = 0; k < sy; k++) px(buf, x + i * f.w + c, y + r * sy + k, pen);
+  }
+}
+const textC = (buf, y, str, pen, sy = 1) => text(buf, ((W - str.length * FONT.w) >> 1) & ~1, y, str, pen, sy);
+
+// ------------------------------------------------------------------ software sprites + dirty rectangles
+let dirty = [], drawn = [];
+function markDirty(x, y, w, h) {
+  const x0 = Math.max(0, x & ~1), x1 = Math.min(W, (x + w + 1) & ~1), y0 = Math.max(0, y), y1 = Math.min(H, y + h);
+  if (x1 > x0 && y1 > y0) dirty.push([x0, y0, x1, y1]);
+}
+function sprite(s, x, y) {
+  if (!s) return;
+  x = Math.round(x) & ~1; y = Math.round(y);                  // Mode 0: 2 pixels per byte -> 2 px steps
+  if (x >= W || y >= H || x + s.w <= 0 || y + s.h <= 0) return;
+  for (let r = 0; r < s.h; r++) {
+    const yy = y + r; if (yy < 0 || yy >= H) continue;
+    for (let c = 0; c < s.w; c++) {
+      const xx = x + c; if (xx < 0 || xx >= W) continue;
+      const v = s.d[r * s.w + c];
+      if (v >= 0) FB[yy * W + xx] = v;                          // mask on pen index (pen 0 transparent)
+    }
+  }
+  drawn.push([x, y, s.w + (s.w & 1), s.h]);
+}
+function dot(x, y, pen) {                                       // 1-pixel software sprite (particles, trails)
+  x = Math.round(x); y = Math.round(y);
+  if (x < 0 || x >= W || y < HUD_TOP || y >= HUD_BOT) return;
+  FB[y * W + x] = pen; drawn.push([x & ~1, y, 2, 1]);
+}
+function beginFrame() {
+  const all = dirty.concat(drawn.map(([x, y, w, h]) => [Math.max(0, x), Math.max(0, y), Math.min(W, x + w), Math.min(H, y + h)]));
+  STATS.dirtyMax = Math.max(STATS.dirtyMax, all.length);
+  for (const [x0, y0, x1, y1] of all) for (let y = y0; y < y1; y++) { const o = y * W; FB.set(BG.subarray(o + x0, o + x1), o + x0); STATS.restoredPx += x1 - x0; }
+  dirty = []; drawn = [];
+}
+function fullRestore() { FB.set(BG); dirty = []; drawn = []; }
+
+// ------------------------------------------------------------------ video output: pens -> inks, raster splits per line, border
+let frameNo = 0, rainbow = null;
+function buildLineInks() {
+  LINE_INKS = [];
+  for (let y = 0; y < H; y++) {
+    const inks = INKS.slice();
+    for (const b of RASTER_BANDS) if (y >= b.y0 && y <= b.y1) for (const p in b.inks) inks[+p] = b.inks[p];
+    LINE_INKS.push(inks);
+  }
+}
+function present() {
+  if (!LINE_INKS) buildLineInks();
+  const border = HW32[BORDER], pal = new Uint32Array(16);
+  OUT32.fill(border);
+  for (let y = 0; y < H; y++) {
+    const inks = LINE_INKS[y];
+    for (let i = 0; i < 16; i++) pal[i] = HW32[inks[i]];
+    if (rainbow && y >= rainbow.y0 && y < rainbow.y1) pal[rainbow.pen] = HW32[rainbow.cyc[((y >> 1) + (frameNo >> 2)) % rainbow.cyc.length]];
+    const o = (y + BT) * TW + BL, f = y * W;
+    for (let x = 0; x < W; x++) OUT32[o + x] = pal[FB[f + x]];
+  }
+  ctx.putImageData(IMG, 0, 0);
+}
+
+// ------------------------------------------------------------------ AY-3-8912 emulation
+const AY = { R: new Uint8Array(16), env: { pos: 0, attack: false, hold: false, cnt: 0, restart: true } };
+let AC = null, muted = false, jinglePlayed = false;
+const AYVOL = [0, 0.0106, 0.0150, 0.0222, 0.0320, 0.0466, 0.0665, 0.1039, 0.1237, 0.1986, 0.2803, 0.3548, 0.4702, 0.5917, 0.7428, 1.0];
+function ayWrite(r, v) { AY.R[r] = v & 255; if (r === 13) AY.env.restart = true; }
+function initAudio() {
+  try {
+    if (!AC) {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      const node = AC.createScriptProcessor(2048, 0, 2);
+      const tcnt = [0, 0, 0], tout = [0, 0, 0];
+      let ncnt = 0, lfsr = 1, nout = 0, ecnt = 0;
+      const tickRate = 1e6 / 8 / AC.sampleRate;               // AY clock 1 MHz on the CPC
+      let acc = 0, dcL = 0, dcR = 0;
+      node.onaudioprocess = e => {
+        const L = e.outputBuffer.getChannelData(0), Rt = e.outputBuffer.getChannelData(1), R = AY.R, env = AY.env;
+        for (let i = 0; i < L.length; i++) {
+          acc += tickRate; let n = 0, sa = 0, sb = 0, sc = 0;
+          while (acc >= 1) {
+            acc -= 1; n++;
+            for (let ch = 0; ch < 3; ch++) {
+              const p = (R[ch * 2] | ((R[ch * 2 + 1] & 15) << 8)) || 1;
+              if (++tcnt[ch] >= p) { tcnt[ch] = 0; tout[ch] ^= 1; }
+            }
+            const np = (R[6] & 31) || 1;
+            if (++ncnt >= np * 2) { ncnt = 0; const bit = (lfsr ^ (lfsr >> 3)) & 1; lfsr = (lfsr >> 1) | (bit << 16); nout = lfsr & 1; }
+            if (env.restart) { env.restart = false; env.pos = 0; env.attack = !!(R[13] & 4); env.hold = false; ecnt = 0; }
+            const ep = (R[11] | (R[12] << 8)) || 1;
+            if (!env.hold && ++ecnt >= ep * 32) {
+              ecnt = 0;
+              if (++env.pos > 15) {
+                const s = R[13];
+                if (!(s & 8)) { env.hold = true; env.pos = 15; env.attack = true; env.zero = true; }
+                else if (s & 1) { env.hold = true; if (s & 2) env.attack = !env.attack; env.pos = 15; env.zero = !env.attack; }
+                else { if (s & 2) env.attack = !env.attack; env.pos = 0; }
+              }
+            }
+            const ev = env.hold ? (env.zero ? 0 : 15) : (env.attack ? env.pos : 15 - env.pos);
+            const mix = R[7];
+            const lv = ch => {
+              const t = (tout[ch] | ((mix >> ch) & 1)) & (nout | ((mix >> (ch + 3)) & 1));
+              const v = R[8 + ch] & 16 ? ev : R[8 + ch] & 15;
+              return t ? AYVOL[v] : 0;
+            };
+            sa += lv(0); sb += lv(1); sc += lv(2);
+          }
+          if (n) { sa /= n; sb /= n; sc /= n; }
+          let l = (sa + sb * 0.6) * 0.32, r = (sc + sb * 0.6) * 0.32;   // CPC stereo: A left, B centre, C right
+          if (muted) l = r = 0;
+          dcL += (l - dcL) * 0.001; dcR += (r - dcR) * 0.001;
+          L[i] = l - dcL; Rt[i] = r - dcR;
+        }
+      };
+      node.connect(AC.destination);
+    }
+    if (AC.state === 'suspended') AC.resume();
+    if (!jinglePlayed && G.state === 'title') { jinglePlayed = true; SFX.jingle(); }
+  } catch (e) { AC = null; }
+}
+// 50 Hz sound driver: per-channel effect sequences writing AY registers
+const CHN = [null, null, null];      // A, B, C : {frames, i, pri}
+function sfx(ch, frames, pri = 1) {
+  const cur = CHN[ch];
+  if (cur && cur.i < cur.frames.length && cur.pri > pri) return;
+  CHN[ch] = { frames, i: 0, pri };
+}
+function soundTick() {
+  let mix = 0x3F;
+  for (let ch = 0; ch < 3; ch++) {
+    const c = CHN[ch];
+    if (!c || c.i >= c.frames.length) { CHN[ch] = null; ayWrite(8 + ch, 0); continue; }
+    const f = c.frames[c.i++];
+    if (f.tp != null) { ayWrite(ch * 2, f.tp & 255); ayWrite(ch * 2 + 1, (f.tp >> 8) & 15); }
+    if (f.np != null) ayWrite(6, f.np);
+    if (f.ep != null) { ayWrite(11, f.ep & 255); ayWrite(12, f.ep >> 8); }
+    if (f.shape != null) ayWrite(13, f.shape);
+    ayWrite(8 + ch, f.env ? 16 : (f.v | 0));
+    if (f.tone !== false && f.tp != null) mix &= ~(1 << ch);
+    if (f.noise) mix &= ~(8 << ch);
+    if (f.v === 0 && !f.env) mix |= (9 << ch);
+  }
+  ayWrite(7, mix | 0xC0);
+}
+const NOTE = n => Math.round(62500 / (440 * Math.pow(2, (n - 69) / 12)));   // MIDI note -> AY tone period
+const seq = (n, fn) => Array.from({ length: n }, (_, i) => fn(i));
+const notes = (list, len, vol, gap = 1) => [].concat(...list.map(m => m < 0 ? seq(len, () => ({ v: 0 })) : seq(len, i => (i < len - gap ? { tp: NOTE(m), v: Math.max(0, vol - (i >> 2)) } : { v: 0 }))));
+const SFX = {
+  shoot: () => sfx(1, seq(6, i => ({ tp: 40 + i * 45, v: 13 - i * 2 })), 2),
+  dig: () => sfx(1, [{ np: 18, noise: true, tone: false, v: 10 }, { np: 22, noise: true, tone: false, v: 6 }], 1),
+  zone: () => sfx(0, notes([84, 88, 91, 96], 3, 13, 0), 3),
+  spawn: () => sfx(0, [{ tp: 180, v: 6 }, { tp: 150, v: 5 }], 0),
+  expire: () => sfx(0, seq(6, i => ({ tp: 400 + i * 60, v: 9 - i })), 1),
+  boom: () => sfx(2, [{ np: 20, noise: true, tone: false, env: 1, ep: 1100, shape: 0 }].concat(seq(15, () => ({ noise: true, tone: false, env: 1 }))), 4),
+  thud: () => sfx(2, [{ np: 30, noise: true, tone: false, env: 1, ep: 450, shape: 0 }].concat(seq(7, () => ({ noise: true, tone: false, env: 1 }))), 3),
+  die: () => sfx(2, [{ np: 31, noise: true, tp: 300, env: 1, ep: 4200, shape: 0 }].concat(seq(55, i => ({ noise: true, tp: 300 + i * 25, env: 1 }))), 9),
+  ufo: () => sfx(0, seq(8, i => ({ tp: (i >> 2) ? 90 : 120, v: 7 })), 0),
+  life: () => sfx(0, notes([79, 83, 86, 91, 95], 3, 14, 0), 6),
+  ready: () => sfx(0, notes([72, 76, 79, 84, 79, 84], 5, 13), 5),
+  launch: () => { sfx(2, seq(150, i => ({ np: Math.max(4, 31 - (i / 6 | 0)), noise: true, tone: false, v: Math.min(15, 6 + (i / 10 | 0)) })), 8);
+                  sfx(1, seq(150, i => ({ tp: Math.max(300, 2400 - i * 14), v: 9 })), 8); },
+  over: () => { sfx(0, notes([67, 63, 60, 55], 12, 13), 9); sfx(1, notes([43, 39, 36, 31], 12, 11), 9); },
+  jingle: () => {   // short intro jingle: melody on A, bass on B
+    sfx(0, notes([72, 76, 79, 84, 83, 79, 76, 79, 84, -1, 88, 86, 84], 6, 13), 7);
+    sfx(1, notes([48, 48, 55, 55, 52, 52, 55, 55, 48, -1, 43, 47, 48], 6, 10), 7);
+  },
+};
+
+// ------------------------------------------------------------------ input
+const keys = {};
+let paused = false, autopilot = false;
+const BLOCK = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'];
+addEventListener('keydown', e => {
+  initAudio(); keys[e.code] = true; keys['key_' + e.key.toLowerCase()] = true;
+  if (BLOCK.includes(e.code)) e.preventDefault();
+  if (e.code === 'KeyM' || e.key === 'm') muted = !muted;
+  if ((e.code === 'KeyP' || e.key === 'p') && G.state !== 'title') { paused = !paused; G.pauseChanged = true; }
+});
+addEventListener('keyup', e => { keys[e.code] = false; keys['key_' + e.key.toLowerCase()] = false; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+addEventListener('pointerdown', initAudio);
+// ---------- Commandes tactiles (multi-touch : croix + FEU en meme temps) ----------
+const touch = { l: false, r: false, u: false, d: false, f: false };
+(function () {
+  const lg = document.getElementById('lgrp'), rg = document.getElementById('rgrp');
+  const B = { l: document.getElementById('bl'), r: document.getElementById('br'), d: document.getElementById('bdig'), f: document.getElementById('bfire') };
+  let fsTried = false;
+  function inRect(t, el, m) { const r = el.getBoundingClientRect(); return t.clientX >= r.left - m && t.clientX <= r.right + m && t.clientY >= r.top - m && t.clientY <= r.bottom + m; }
+  const midX = el => { const r = el.getBoundingClientRect(); return r.left + r.width / 2; };
+  function update(e) {
+    let l = false, r = false, u = false, d = false, f = false;
+    for (const t of e.touches) {
+      // un pouce dans un groupe choisit le bouton le plus proche : glisser entre gauche/droite change de sens
+      if (inRect(t, lg, 28)) { if (t.clientX < midX(lg)) l = true; else r = true; }
+      else if (inRect(t, rg, 28)) { if (t.clientX < midX(rg)) d = true; else f = true; }
+    }
+    Object.assign(touch, { l, r, u, d, f });
+    for (const k in B) B[k].classList.toggle('on', { l, r, d, f }[k]);
+  }
+  function start(e) {
+    if (!IS_TOUCH) { IS_TOUCH_LATE(); }
+    initAudio();
+    if (!fsTried) {   // plein ecran au premier appui si possible (iOS Safari : absent -> on ignore)
+      fsTried = true;
+      const de = document.documentElement, rq = de.requestFullscreen || de.webkitRequestFullscreen;
+      if (rq && !document.fullscreenElement && !navigator.standalone) { try { const p = rq.call(de, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => {}); } catch (err) {} }
+    }
+    update(e);
+    if (e.cancelable) e.preventDefault();
+  }
+  function IS_TOUCH_LATE() { document.documentElement.classList.add('touch'); setTimeout(fit, 0); }
+  const opt = { passive: false };
+  addEventListener('touchstart', start, opt);
+  addEventListener('touchmove', e => { update(e); if (e.cancelable) e.preventDefault(); }, opt);
+  addEventListener('touchend', e => { update(e); if (e.cancelable) e.preventDefault(); }, opt);
+  addEventListener('touchcancel', update, opt);
+  addEventListener('gesturestart', e => e.preventDefault(), opt);   // pinch-zoom iOS
+  addEventListener('contextmenu', e => e.preventDefault());
+  addEventListener('dblclick', e => e.preventDefault());
+  addEventListener('blur', () => Object.assign(touch, { l: false, r: false, u: false, d: false, f: false }));
+  document.addEventListener('fullscreenchange', () => setTimeout(fit, 50));
+})();
+let prevFire = false;
+const inp = { left: false, right: false, down: false, fire: false, firePressed: false };
+function readInput() {
+  let l = keys.ArrowLeft || keys.KeyA || keys.key_q || keys.key_a;
+  let r = keys.ArrowRight || keys.KeyD || keys.key_d;
+  let d = keys.ArrowDown || keys.KeyS || keys.key_s;
+  let f = keys.Space || keys.Enter || keys.KeyK;
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const p of pads) {
+    if (!p) continue;
+    const ax = p.axes[0] || 0, ay = p.axes[1] || 0, b = p.buttons;
+    if (ax < -0.4 || (b[14] && b[14].pressed)) l = true;
+    if (ax > 0.4 || (b[15] && b[15].pressed)) r = true;
+    if (ay > 0.4 || (b[13] && b[13].pressed)) d = true;
+    if ((b[0] && b[0].pressed) || (b[1] && b[1].pressed) || (b[9] && b[9].pressed)) { f = true; initAudio(); }
+  }
+  l = l || touch.l; r = r || touch.r; d = d || touch.d; f = f || touch.f;
+  if (autopilot) ({ l, r, d, f } = autoInput());
+  inp.left = !!l; inp.right = !!r; inp.down = !!d; inp.fire = !!f;
+  inp.firePressed = inp.fire && !prevFire; prevFire = inp.fire;
+}
+
+// ------------------------------------------------------------------ layout (OldGraphics: 200 lines, ground y=150, HUD 0-15 / 188-199)
+const GY = 150, HUD_TOP = 16, HUD_BOT = 188, ZONES = 10, ZW = 12;
+const BAY = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+const bay = (x, y) => BAY[y & 3][x & 3] / 16;
+function rnd32(seed) { return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
+function disc(buf, cx, cy, r, ax, fn) {
+  for (let y = Math.floor(cy - r - 1); y <= cy + r + 1; y++) for (let x = Math.floor(cx - r * ax - 1); x <= cx + r * ax + 1; x++) {
+    const dx = (x + 0.5 - cx) / ax, dy = y + 0.5 - cy;
+    if (dx * dx + dy * dy <= r * r) { const v = fn(x, y, dx / r, dy / r); if (v != null) px(buf, x, y, v); }
+  }
+}
+function buildBase() {
+  if (BG_IMAGE) { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) BASE[y * W + x] = (y < BG_IMAGE.h && x < BG_IMAGE.w) ? BG_IMAGE.pen[y * BG_IMAGE.w + x] : 0; return; }
+  // procedural placeholder background in the same pen roles
+  const R = rnd32(1234);
+  BASE.fill(T);
+  for (let y = HUD_TOP; y < GY; y++) for (let x = 0; x < W; x++) BASE[y * W + x] = bay(x, y) < 0.5 ? SKYA : SKYB;
+  for (let i = 0; i < 60; i++) px(BASE, R() * W | 0, HUD_TOP + R() * 100 | 0, [BW, PC, PY][R() * 3 | 0]);
+  disc(BASE, 112, 60, 26, 0.6, (x, y, dx, dy) => { const l = -dx * 0.6 - dy * 0.6; return l > 0.4 ? PY : l > 0 ? BY : l > -0.4 ? OR : BR; });
+  for (let x = 0; x < W; x++) { const h = 16 + 9 * Math.sin(x / 12) + 5 * Math.sin(x / 4.1) | 0; for (let y = GY - h; y < GY; y++) px(BASE, x, y, y === GY - h ? PC : MV); }
+  for (let y = GY; y < HUD_BOT; y++) for (let x = 0; x < W; x++) px(BASE, x, y, y < GY + 2 ? PY : bay(x, y) < (y - GY) / 38 ? OL : OR);
+}
+
+// ------------------------------------------------------------------ game state
+let G = { state: 'title', t: 0, hi: 0 };
+try { G.hi = +localStorage.getItem('astroPiocheCpcHi') || 0; } catch (e) {}
+function saveHi() {   // record conserve meme si on quitte en cours de partie
+  if (G.score > G.hi) { G.hi = G.score; try { localStorage.setItem('astroPiocheCpcHi', G.hi); } catch (e) {} }
+}
+addEventListener('pagehide', saveHi);
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveHi(); });
+const rnd = (a, b) => a + Math.random() * (b - a);
+let parts = [];
+function newGame() { G = { state: 'intro', t: 0, hi: G.hi, level: 1, score: 0, lives: 3 }; startLevel(); }
+function startLevel() {
+  const L = G.level;
+  Object.assign(G, {
+    zonesDone: 0, zones: [], holes: [], meteors: [], booms: [], bullets: [], saucer: null, rocketReady: false, readyT: 0,
+    rocketY: GY - 32, astro: { x: 76, face: 1, digging: false, inv: 0, anim: 0, cool: 0, pose: 0, visible: true, digSnd: 0, deadT: -1 },
+    maxZones: Math.min(2 + Math.floor((L - 1) / 2), 5), zoneLife: Math.max(3.5, 9 - (L - 1) * 0.6),
+    digTime: Math.min(1.6, 0.9 + (L - 1) * 0.07), meteorEvery: Math.max(0.3, 1.8 - (L - 1) * 0.15),
+    meteorSpeed: Math.min(95, 26 + (L - 1) * 6), maxMeteors: Math.min(9, 2 + L),
+    spawnT: 1.5, zoneT: 0.3, state: 'intro', stateT: 2.2,
+  });
+  parts = []; rainbow = null; bannerSave = null;
+  buildBase(); BG.set(BASE); hudKey = ''; drawHUD(); fullRestore();
+  banner(['NIVEAU ' + L, 'CREUSE 10 ZONES'], [BW, BY]);
+}
+// banners: drawn into the background, the covered bytes saved and restored afterwards
+let bannerSave = null;
+function banner(lines, pens, y0 = 66) {
+  unbanner();
+  const h = lines.length * 12 + 6;
+  bannerSave = { y0, h, data: BG.slice(y0 * W, (y0 + h) * W) };
+  fillRect(BG, 8, y0, W - 16, h, K);
+  for (let x = 8; x < W - 8; x++) { px(BG, x, y0, PC); px(BG, x, y0 + h - 1, PC); }
+  lines.forEach((s, i) => textC(BG, y0 + 4 + i * 12, s, pens[i] ?? BW));
+  markDirty(0, y0, W, h);
+}
+function unbanner() { if (!bannerSave) return; BG.set(bannerSave.data, bannerSave.y0 * W); markDirty(0, bannerSave.y0, W, bannerSave.h); bannerSave = null; }
+let hudKey = '';
+function drawHUD() {
+  const key = [G.score, G.lives, G.level, G.hi, G.zonesDone].join('/');
+  if (key === hudKey) return;
+  hudKey = key;
+  for (let y = 0; y < HUD_TOP; y++) BG.set(BASE.subarray(y * W, (y + 1) * W), y * W);
+  for (let y = HUD_BOT; y < H; y++) BG.set(BASE.subarray(y * W, (y + 1) * W), y * W);
+  text(BG, 0, 4, String(G.score).padStart(6, '0'), BY);
+  text(BG, 56, 4, 'x' + Math.min(G.lives, 9), BW);
+  for (let i = 0; i < Math.min(G.lives, 3); i++) blit(BG, spr('life_icon'), 76 + i * 8, 5);
+  for (let i = 0; i < ZONES; i++) blit(BG, spr('zone_pip', i < G.zonesDone ? frameIdx('zone_pip', 'done') : frameIdx('zone_pip', 'todo')), 120 + i * 4, 6);
+  text(BG, 0, 190, 'NIVEAU ' + G.level, PC);
+  const hs = 'HI' + String(Math.max(G.hi, G.score)).padStart(6, '0');
+  text(BG, W - hs.length * FONT.w, 190, hs, BM);
+  markDirty(0, 0, W, HUD_TOP); markDirty(0, HUD_BOT, W, H - HUD_BOT);
+}
+// zones and holes are part of the background; a strip is rebuilt when one of them changes
+function zoneFrame(z) {
+  const step = z.prog <= 0 ? 0 : z.prog < 1 / 3 ? 1 : z.prog < 2 / 3 ? 2 : 3;
+  const fps = z.life < 2 ? fpsOf('dig_zone', 'expiring', 16) : fpsOf('dig_zone', 'normal', 5);
+  return 2 * step + (((G.t * fps) | 0) & 1);
+}
+function redrawSurface(x0, x1) {
+  x0 = Math.max(0, (x0 & ~1) - 2); x1 = Math.min(W, x1 + 2);
+  for (let y = GY - 4; y < GY + 8; y++) BG.set(BASE.subarray(y * W + x0, y * W + x1), y * W + x0);
+  for (const h of G.holes) if (h + ZW > x0 && h < x1) blit(BG, spr('hole'), h, GY - 1, x0, x1);
+  for (const z of G.zones) if (z.x + ZW > x0 && z.x < x1) blit(BG, spr('dig_zone', z.frame), z.x, GY - 1, x0, x1);
+  markDirty(x0, GY - 4, x1 - x0, 12);
+}
+const ASTRO_HB = () => hitbox('astronaut_right', { x: 1, y: 4, w: 6, h: 12 });
+function zoneUnder() { const cx = G.astro.x + 4; for (const z of G.zones) if (Math.abs(cx - (z.x + 6)) <= 6) return z; return null; }
+function spawnZone() {
+  for (let tries = 0; tries < 40; tries++) {
+    const x = (rnd(18, W - 14) | 0) & ~1;
+    let ok = true;
+    for (const z of G.zones) if (Math.abs(z.x - x) < 16) ok = false;
+    if (tries < 25) for (const h of G.holes) if (Math.abs(h - x) < 13) ok = false;
+    if (tries < 35 && Math.abs(x + 6 - (G.astro.x + 4)) < 10) ok = false;
+    if (ok) { const z = { x, life: G.zoneLife, prog: 0, age: 0 }; z.frame = zoneFrame(z); G.zones.push(z); redrawSurface(x, x + ZW); SFX.spawn(); return; }
+  }
+}
+function spawnMeteor() {
+  const a = G.astro, big = Math.random() < 0.6, s = spr(big ? 'meteor_big' : 'meteor_small');
+  let x, y;
+  if (Math.random() < 0.6) { x = rnd(0, W - s.w); y = HUD_TOP; } else { x = Math.random() < 0.5 ? -s.w : W; y = rnd(24, 90); }
+  const tx = a.x + 4 + rnd(-22, 22), dx = tx - x, dy = GY - y, d = Math.hypot(dx, dy), sp2 = G.meteorSpeed * (big ? 1 : 1.35) * rnd(0.85, 1.15);
+  const hb = hitbox(big ? 'meteor_big' : 'meteor_small', { x: 0, y: 0, w: s.w, h: s.h });
+  G.meteors.push({ x, y, vx: dx / d * sp2, vy: dy / d * sp2, big, w: s.w, h: s.h, hb, ph: Math.random() * 6 });
+}
+function burst(x, y, n, pens, sp3 = 40, up = false) {
+  for (let i = 0; i < n && parts.length < 90; i++) {
+    const a = up ? rnd(-Math.PI, 0) : rnd(0, Math.PI * 2), s = rnd(sp3 * 0.3, sp3);
+    parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rnd(0.25, 0.7), pen: pens[(Math.random() * pens.length) | 0] });
+  }
+}
+function boom(cx, cy) { G.booms.push({ cx, cy, t: 0 }); burst(cx, cy, 10, [BY, OR, BR, PY]); }
+function killAstro() {
+  const a = G.astro;
+  a.digging = false; a.deadT = 0;
+  boom(a.x + 4, GY - 8); burst(a.x + 4, GY - 8, 20, [BW, GR, OR, BY], 55);
+  SFX.die(); G.lives--; G.state = 'dying'; G.stateT = 2.2;
+}
+
+function update(dt) {
+  G.t += dt; frameNo++;
+  readInput();
+  if (G.state === 'title') { titleTick(); if (inp.firePressed) { newGame(); SFX.ready(); } soundTick(); return; }
+  if (G.state === 'gameover') { G.stateT -= dt; updateParts(dt); if (G.stateT <= 0 && inp.firePressed) toTitle(); soundTick(); return; }
+  if (G.state === 'intro') { G.stateT -= dt; updatePlay(dt, false); if (G.stateT <= 0) { G.state = 'play'; unbanner(); } }
+  else if (G.state === 'play') updatePlay(dt, true);
+  else if (G.state === 'dying') {
+    G.astro.deadT += dt; updateWorld(dt, false); G.stateT -= dt;
+    if (G.stateT <= 0) {
+      if (G.lives <= 0) {
+        G.state = 'gameover'; G.stateT = 1.2; SFX.over();
+        if (G.score > G.hi) { G.hi = G.score; G.newHi = true; try { localStorage.setItem('astroPiocheCpcHi', G.hi); } catch (e) {} }
+        banner(G.newHi ? ['FIN DE PARTIE', 'NOUVEAU RECORD !'] : ['FIN DE PARTIE', 'ESPACE : MENU'], [BR, BY]);
+      } else {
+        G.meteors = []; G.bullets = []; Object.assign(G.astro, { visible: true, inv: 2.5, digging: false, deadT: -1 }); G.state = 'play';
+      }
+    }
+  } else if (G.state === 'launch') {
+    G.stateT -= dt; G.launchV += 60 * dt;
+    if (G.stateT < 2.6) G.rocketY -= G.launchV * dt;
+    if (G.rocketY + 44 > HUD_TOP) burst(6, G.rocketY + 44, 2, [GR, GR, PY, OR], 18, false);
+    G.meteors = []; updateBooms(dt); updateParts(dt);
+    if (G.stateT <= 0) { G.score += 500 * G.level; G.level++; startLevel(); }
+  }
+  if (G.readyT > 0) { G.readyT -= dt; if (G.readyT <= 0 && G.state !== 'gameover') unbanner(); }
+  drawHUD();
+  soundTick();
+}
+function updatePlay(dt, active) {
+  const a = G.astro;
+  a.cool -= dt; a.inv = Math.max(0, a.inv - dt); a.pose = Math.max(0, a.pose - dt);
+  const zone = zoneUnder();
+  if (inp.fire && a.cool <= 0 && G.bullets.length < 2) {
+    const dir = inp.left ? -1 : inp.right ? 1 : 0;
+    G.bullets.push({ x: a.x + (a.face > 0 ? 6 : 1), y: GY - 20, vx: dir * 70, vy: -150 });
+    a.cool = 0.22; a.pose = 0.18; a.digging = false; SFX.shoot();
+  }
+  if (inp.down && !inp.fire && zone) {
+    a.digging = true; zone.prog += dt / G.digTime; a.anim += dt; a.digSnd -= dt;
+    if (a.digSnd <= 0) { SFX.dig(); a.digSnd = 0.14; burst(zone.x + 6, GY - 1, 3, [PY, OR, OL], 26, true); }
+    if (zone.prog >= 1) {
+      G.zones.splice(G.zones.indexOf(zone), 1); G.holes.push(zone.x); redrawSurface(zone.x, zone.x + ZW);
+      G.zonesDone++; G.score += 100 + 10 * (G.level - 1); SFX.zone();
+      burst(zone.x + 6, GY - 1, 14, [BR, OR, BY, PY], 45, true);
+      if (G.zonesDone >= ZONES && !G.rocketReady) { G.rocketReady = true; G.readyT = 2.5; SFX.ready(); banner(['FUSEE PRETE !'], [PC], 60); }
+    }
+  } else {
+    a.digging = false;
+    const mv = inp.left ? -1 : inp.right ? 1 : 0;
+    if (mv) { a.face = mv; a.x += mv * 44 * dt; a.anim += dt; }
+    a.x = Math.max(G.rocketReady ? 2 : 14, Math.min(W - 8, a.x));
+  }
+  if (G.rocketReady && a.x <= 10 && a.visible) {
+    a.visible = false; G.state = 'launch'; G.stateT = 3.2; G.launchV = 5; G.bullets = []; unbanner(); SFX.launch(); return;
+  }
+  if (active) {
+    G.zoneT -= dt;
+    if (G.zoneT <= 0 && G.zones.length < G.maxZones && G.zonesDone + G.zones.length < ZONES) { spawnZone(); G.zoneT = rnd(0.6, 1.6); }
+    for (let i = G.zones.length - 1; i >= 0; i--) {
+      const z = G.zones[i]; z.age += dt;
+      if (!(a.digging && z === zone)) z.life -= dt;
+      if (z.life <= 0) { G.zones.splice(i, 1); redrawSurface(z.x, z.x + ZW); SFX.expire(); continue; }
+      const f = zoneFrame(z); if (f !== z.frame) { z.frame = f; redrawSurface(z.x, z.x + ZW); }
+    }
+    G.spawnT -= dt;
+    if (G.spawnT <= 0 && G.meteors.length < G.maxMeteors) { spawnMeteor(); G.spawnT = G.meteorEvery * rnd(0.6, 1.4); }
+    if (!G.saucer && Math.random() < dt / 22) { const left = Math.random() < 0.5; G.saucer = { x: left ? -12 : W, vx: (left ? 1 : -1) * (26 + G.level * 2), y: 22, snd: 0 }; }
+  }
+  updateWorld(dt, true);
+}
+function updateBooms(dt) { for (let i = G.booms.length - 1; i >= 0; i--) { G.booms[i].t += dt; if (G.booms[i].t > 0.3) G.booms.splice(i, 1); } }
+function updateParts(dt) { for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 50 * dt; p.life -= dt; if (p.life <= 0 || p.y > GY + 1) parts.splice(i, 1); } }
+function updateWorld(dt, canHit) {
+  const a = G.astro, ahb = ASTRO_HB(), ax0 = a.x + ahb.x, ay0 = GY - 16 + ahb.y;
+  for (let i = G.bullets.length - 1; i >= 0; i--) {
+    const b = G.bullets[i]; b.x += b.vx * dt; b.y += b.vy * dt;
+    let dead = b.y < HUD_TOP || b.x < -2 || b.x > W + 2;
+    for (let j = G.meteors.length - 1; j >= 0 && !dead; j--) {
+      const m = G.meteors[j], hb = m.hb;
+      if (b.x + 1 >= m.x + hb.x - 1 && b.x <= m.x + hb.x + hb.w + 1 && b.y <= m.y + hb.y + hb.h && b.y + 4 >= m.y + hb.y) {
+        G.meteors.splice(j, 1); dead = true; G.score += m.big ? 20 : 50; boom(m.x + m.w / 2, m.y + m.h / 2); SFX.boom();
+      }
+    }
+    const s = G.saucer;
+    if (!dead && s) {
+      const hb = hitbox('saucer', { x: 0, y: 3, w: 12, h: 5 });
+      if (b.x + 1 >= s.x + hb.x && b.x <= s.x + hb.x + hb.w && b.y <= s.y + hb.y + hb.h && b.y + 4 >= s.y + hb.y) {
+        dead = true; G.saucer = null; G.lives = Math.min(9, G.lives + 1); G.score += 300;
+        boom(s.x + 6, s.y + 4); burst(s.x + 6, s.y + 4, 16, [BM, MV, PC, BW], 50); SFX.boom(); SFX.life();
+      }
+    }
+    if (dead) G.bullets.splice(i, 1);
+  }
+  for (let i = G.meteors.length - 1; i >= 0; i--) {
+    const m = G.meteors[i], hb = m.hb; m.x += m.vx * dt; m.y += m.vy * dt; m.ph += dt;
+    if (m.x < -14 || m.x > W + 6) { G.meteors.splice(i, 1); continue; }
+    const hit = a.visible && a.deadT < 0 && m.x + hb.x + hb.w > ax0 && m.x + hb.x < ax0 + ahb.w && m.y + hb.y + hb.h > ay0 && m.y + hb.y < ay0 + ahb.h;
+    if (hit && canHit && a.inv <= 0 && G.state === 'play') { G.meteors.splice(i, 1); killAstro(); continue; }
+    if (m.y + m.h >= GY) { G.meteors.splice(i, 1); boom(m.x + m.w / 2, GY - 4); burst(m.x + m.w / 2, GY - 1, 8, [PY, OR, OL], 35, true); SFX.thud(); }
+  }
+  const s = G.saucer;
+  if (s) { s.x += s.vx * dt; s.y = 22 + Math.round(Math.sin(G.t * 3) * 3); s.snd -= dt; if (s.snd <= 0) { SFX.ufo(); s.snd = 0.16; } if (s.x < -14 || s.x > W + 2) G.saucer = null; }
+  updateBooms(dt); updateParts(dt);
+}
+
+// ------------------------------------------------------------------ title screen
+function toTitle() {
+  unbanner();
+  G = { state: 'title', t: 0, hi: G.hi };
+  parts = []; buildBase(); BG.set(BASE);
+  fillRect(BG, 0, 28, W, 92, K);
+  for (let x = 0; x < W; x++) { px(BG, x, 28, PC); px(BG, x, 119, PC); }
+  textC(BG, 34, 'ASTRO', BM, 2);
+  textC(BG, 54, 'PIOCHE', BM, 2);
+  textC(BG, 76, 'CREUSE LES ZONES', BW);
+  textC(BG, 86, 'ABATS LES METEORES', BW);
+  textC(BG, 96, 'SOUCOUPE = +1 VIE', PY);
+  text(BG, 0, 4, 'AMSTRAD CPC', PC);
+  text(BG, 0, 190, 'RECORD ' + String(G.hi).padStart(6, '0'), BM);
+  fullRestore(); hudKey = '';
+  rainbow = { pen: BM, y0: 34, y1: 70, cyc: [24, 15, 6, 7, 8, 17, 5, 2, 11, 20, 23, 25] };   // extra raster split on pen 15 over the logo
+  G.blink = undefined; titleTick();
+}
+function titleTick() {
+  const on = ((G.t * 2) | 0) % 2 === 0;
+  if (on !== G.blink) { G.blink = on; fillRect(BG, 0, 106, W, 10, K); if (on) textC(BG, 107, 'ESPACE POUR JOUER', BY); markDirty(0, 106, W, 10); }
+}
+
+// ------------------------------------------------------------------ autopilot (#demo / #test / #shot)
+function autoInput() {
+  const o = { l: false, r: false, d: false, f: false };
+  if (G.state === 'title' || G.state === 'gameover') { o.f = (G.t * 2 | 0) % 2 === 0; return o; }
+  if (!G.astro) return o;
+  const a = G.astro, ax = a.x + 4;
+  if (a.cool <= 0 && G.bullets.length < 2) {
+    for (const m of G.meteors) {
+      if (m.y < 22) continue;
+      for (const dir of [0, -1, 1]) {
+        const bx0 = (a.x + (a.face > 0 ? 6 : 1)) & ~1;
+        for (let t = 0; t < 1.2; t += 0.02) {
+          const bx = bx0 + dir * 70 * t, by = GY - 18 - 150 * t, mx = m.x + m.vx * t + m.w / 2, my = m.y + m.vy * t + m.h / 2;
+          if (my > GY) break;
+          if (Math.abs(bx - mx) < 3 && Math.abs(by - my) < 4) { o.f = true; o.l = dir < 0; o.r = dir > 0; return o; }
+        }
+      }
+    }
+    if (G.saucer && Math.abs(G.saucer.x + 6 + G.saucer.vx * 0.85 - ax) < 4) { o.f = true; return o; }
+  }
+  for (const m of G.meteors) {
+    if (m.vy <= 0) continue;
+    const t = (GY - 10 - m.y) / m.vy, ix = m.x + m.vx * t + m.w / 2;
+    if (t > 0 && t < 0.9 && Math.abs(ix - ax) < 8) { if (ix > ax || ax > W - 20) o.l = true; else o.r = true; return o; }
+  }
+  if (G.rocketReady) { o.l = true; return o; }
+  let tz = null, best = 1e9;
+  for (const z of G.zones) { const d = Math.abs(z.x + 6 - ax); if (d < best) { best = d; tz = z; } }
+  if (tz) { const dx = tz.x + 6 - ax; if (Math.abs(dx) <= 4) o.d = true; else if (dx < 0) o.l = true; else o.r = true; }
+  return o;
+}
+
+// ------------------------------------------------------------------ sprite pass (software sprites each frame)
+function drawSprites() {
+  beginFrame();
+  if (G.state === 'title') {
+    sprite(spr('rocket_idle'), 2, GY - 32);
+    const dig = animFrames('astronaut_right', 'dig', ['dig1', 'dig2']);
+    sprite(spr('astronaut_right', frameIdx('astronaut_right', dig[((G.t * 6) | 0) % dig.length])), 76, GY - 16);
+    sprite(spr('saucer', (frameNo >> 3) & 1), ((G.t * 30) % (W + 24)) - 12, 125 + Math.round(Math.sin(G.t * 3) * 2));
+    STATS.spritesMax = Math.max(STATS.spritesMax, drawn.length);
+    return;
+  }
+  // rocket (+ flame during launch, beacon when ready)
+  if (G.state === 'launch') sprite(spr('rocket_takeoff', (frameNo / (HZ / fpsOf('rocket_takeoff', 'x', 12)) | 0) & 1), 2, G.rocketY);
+  else {
+    sprite(spr('rocket_idle'), 2, G.rocketY);
+    if (G.rocketReady) {                                     // "FUSEE PRETE" beacon: blinking nose light + arrow
+      const on = (frameNo >> 3) & 1;
+      dot(6, G.rocketY - 2, on ? BY : BR); dot(7, G.rocketY - 2, on ? BY : BR); dot(6, G.rocketY - 3, on ? PY : BY);
+      if (on) for (let k = 0; k < 3; k++) { dot(16 + k * 2, GY - 24 - k, PC); dot(16 + k * 2, GY - 24 + k, PC); }
+    }
+  }
+  for (const m of G.meteors) {                                // trail in pens 12/11/10/9 behind the meteor
+    const n = Math.hypot(m.vx, m.vy) || 1;
+    [BY, OR, BR, DR].forEach((pen, k) => dot(m.x + m.w / 2 - m.vx / n * (k + 1) * 3, m.y + m.h / 2 - m.vy / n * (k + 1) * 3, pen));
+    const name = m.big ? 'meteor_big' : 'meteor_small';
+    sprite(spr(name, (m.ph * fpsOf(name, 'x', 6) | 0) % SPR[name].frames.length), m.x, m.y);
+  }
+  if (G.saucer) sprite(spr('saucer', (G.t * fpsOf('saucer', 'x', 4) | 0) & 1), G.saucer.x, G.saucer.y);
+  for (const b of G.booms) {
+    const e = SPR.explosion, an = (e.meta && e.meta.anchor) || { x: 5, y: 8 };
+    sprite(spr('explosion', (b.t * fpsOf('explosion', 'x', 10)) | 0), b.cx - an.x, b.cy - an.y);
+  }
+  const a = G.astro;
+  if (a && (a.visible || a.deadT >= 0) && G.state !== 'launch' && !(a.inv > 0 && (frameNo >> 2) & 1)) {
+    const name = a.face < 0 ? 'astronaut_left' : 'astronaut_right';
+    let fname;
+    if (a.deadT >= 0) { const d = animFrames(name, 'death', ['death1', 'death2', 'death3']); fname = d[Math.min(d.length - 1, (a.deadT * fpsOf(name, 'death', 6)) | 0)]; }
+    else if (a.pose > 0) fname = 'shoot';
+    else if (a.digging) { const d = animFrames(name, 'dig', ['dig1', 'dig2']); fname = d[((a.anim * fpsOf(name, 'dig', 8)) | 0) % d.length]; }
+    else if (inp.left || inp.right) { const d = animFrames(name, 'walk', ['walk1', 'walk2', 'walk3', 'walk2']); fname = d[((a.anim * fpsOf(name, 'walk', 8)) | 0) % d.length]; }
+    else fname = 'stand';
+    sprite(spr(name, frameIdx(name, fname)), a.x, GY - 16);
+  }
+  for (const b of G.bullets) sprite(spr('shot', (frameNo >> 2) & 1), b.x, b.y);
+  for (const p of parts) dot(p.x, p.y, p.pen);
+  STATS.spritesMax = Math.max(STATS.spritesMax, drawn.length);
+}
+
+// ------------------------------------------------------------------ main loop (50 Hz logic)
+let last = performance.now(), acc = 0;
+function frame(now) {
+  acc += Math.min(0.1, (now - last) / 1000); last = now;
+  let stepped = false;
+  while (acc >= STEP) { if (!paused) update(STEP); else { readInput(); soundTick(); } acc -= STEP; stepped = true; }
+  if (stepped) { drawSprites(); if (paused) pauseOverlay(); present(); }
+  requestAnimationFrame(frame);
+}
+function pauseOverlay() { const y = 86; for (let yy = y; yy < y + 12; yy++) FB.fill(K, yy * W + 50, yy * W + 110); text(FB, 60, y + 2, 'PAUSE', BW); drawn.push([50, y, 60, 12]); }
+
+const mode = location.hash.slice(1);
+async function boot() {
+  try { await loadAssets(); } catch (e) { ASSET_REPORT.error = String(e); }
+  buildLineInks();
+  toTitle();
+  if (mode === 'demo') autopilot = true;
+  if (mode === 'test' || mode === 'shot') {
+    autopilot = true;
+    const out = document.getElementById('out');
+    const st = { deaths: 0, games: 0, launches: 0, maxLevel: 1, ufoLives: 0, steps: 0 };
+    try {
+      if (mode === 'test') {
+        let ps = 'title', pl = 0;
+        for (let i = 0; i < HZ * 60 * 20; i++) {
+          update(STEP); drawSprites(); st.steps++;
+          if (G.state === 'title' && ps !== 'title') st.games++;
+          if (G.state === 'launch' && ps !== 'launch') st.launches++;
+          if (G.state === 'dying' && ps !== 'dying') st.deaths++;
+          if (G.level > st.maxLevel) st.maxLevel = G.level;
+          if (G.lives > pl && ps === 'play' && G.state === 'play') st.ufoLives++;
+          ps = G.state; pl = G.lives || 0;
+          if (i % 97 === 0) {   // dirty-rect integrity: incremental FB must equal BG + current sprites
+            const inc = FB.slice(), d = drawn; FB.set(BG); drawn = []; dirty = [];
+            drawSprites(); STATS.checks++;
+            for (let k = 0; k < FB.length; k++) if (FB[k] !== inc[k]) { STATS.mismatches++;  break; }
+            FB.set(inc); drawn = d;
+          }
+          if (i % 500 === 0) present();
+        }
+        for (let k = 0; k < FB.length; k++) if (FB[k] === T && BG[k] !== T) STATS.transparentLeaks++;
+        st.engine = STATS; st.assets = ASSET_REPORT;
+        out.textContent = 'OK ' + JSON.stringify(st);
+      } else {
+        newGame();
+        for (let i = 0; i < HZ * 14; i++) { update(STEP); drawSprites(); }
+        if (G.state !== 'play') { newGame(); for (let i = 0; i < HZ * 4; i++) { update(STEP); drawSprites(); } }
+        G.state = 'play'; G.booms = []; parts = []; unbanner();
+        const z0 = G.zones[0];
+        Object.assign(G.astro, { visible: true, inv: 0, pose: 0, digging: !!z0, anim: 0.07, x: z0 ? z0.x + 2 : 100, deadT: -1 });
+        if (z0) { z0.prog = 0.4; z0.frame = zoneFrame(z0); redrawSurface(z0.x, z0.x + ZW); burst(z0.x + 6, GY - 1, 6, [PY, OR, OL], 20, true); updateParts(0.1); }
+        G.saucer = { x: 30, vx: 30, y: 22, snd: 9 };
+        const mb = spr('meteor_big'), ms = spr('meteor_small');
+        G.meteors = [{ x: 60, y: 60, vx: 14, vy: 30, big: true, w: mb.w, h: mb.h, hb: hitbox('meteor_big', {}), ph: 0 },
+                     { x: 132, y: 96, vx: -14, vy: 28, big: false, w: ms.w, h: ms.h, hb: hitbox('meteor_small', {}), ph: 0 },
+                     { x: 36, y: 104, vx: 10, vy: 30, big: true, w: mb.w, h: mb.h, hb: hitbox('meteor_big', {}), ph: 0.2 }];
+        G.bullets = [{ x: G.astro.x + 6, y: 92, vx: 0, vy: -150 }];
+        drawSprites(); present(); paused = true;
+        out.textContent = 'SHOT ' + JSON.stringify(ASSET_REPORT);
+      }
+    } catch (e) { out.textContent = 'ERROR ' + e.message + '\n' + e.stack; }
+    return;
+  }
+  drawSprites(); present();
+  requestAnimationFrame(frame);
+}
+window.addEventListener('error', e => { document.getElementById('out').textContent += '\nERROR ' + e.message; });
+boot();
+</script>
+</body>
+</html>
