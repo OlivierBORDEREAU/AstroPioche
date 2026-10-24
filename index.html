@@ -31,6 +31,11 @@
   .links a.t{border-color:#e33;background:#2a0d0d}
   .links a:active{transform:translateY(2px)}
   .c2600{border-color:#5a4a2a} .ccour{border-color:#2a3a6a} .ccpc{border-color:#1f2f9a}
+  .cremake{border-color:#a0287f;box-shadow:0 0 18px rgba(255,63,216,.25)}
+  .cremake h2{color:#ff6ae0;text-shadow:0 0 8px rgba(255,63,216,.6)}
+  .cremake .shot{image-rendering:auto}
+  .cremake .links a{border-color:#39f3ff;background:#0b1a2a}
+  .desc{margin:0 0 10px;color:#cfe;font-size:13px;line-height:1.5;max-width:480px}
   footer{text-align:center;color:#555;font-size:11px;margin-top:10px}
   @media (max-width:640px){
     .card{flex-direction:column;gap:12px}
@@ -71,6 +76,16 @@
     <div class="links"><a class="t" href="cpc-touch.html">Tactile</a><a href="cpc.html">Clavier</a></div>
   </div>
 </section>
-<footer>Tactile = iPhone / iPad &middot; Clavier = fleches, Espace, Bas pour creuser</footer>
+
+<section class="card cremake" style="--cv:url(img/cover-remake.jpg)">
+  <div class="box"><img src="img/cover-remake.jpg" alt="Boîte néon façon synthwave de ASTRO PIOCHE Remake" width="480" height="660"></div>
+  <div class="info">
+    <h2>ASTRO PIOCHE REMAKE</h2>
+    <p class="desc">Version néon sur un astéroïde rond qui tourne : combos, jetpack pour sauter rochers et fissures, minerai rare, améliorations entre les niveaux et musique synthwave.</p>
+    <img class="shot" src="img/shot-remake.png" alt="Capture ASTRO PIOCHE Remake" width="960" height="720">
+    <div class="links"><a href="moderne.html">Jouer (tactile + clavier)</a></div>
+  </div>
+</section>
+<footer>Tactile = iPhone / iPad &middot; Clavier = fleches, Espace, Bas pour creuser &middot; Remake = tactile et clavier dans la meme page</footer>
 </body>
 </html>
