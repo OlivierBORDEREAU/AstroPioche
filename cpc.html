@@ -85,21 +85,50 @@ let RASTER_BANDS = [   // default = OldGraphics' split table
 let LINE_INKS = null;   // per-line firmware ink for each pen, built from bands (+ title rainbow)
 
 // ------------------------------------------------------------------ canvas / framebuffer
-const cv = document.getElementById('c'), ctx = cv.getContext('2d');
-cv.width = TW; cv.height = TH;
+// image native dans un canvas hors écran, recopiée à l'échelle entière dans le canvas visible (voir fit/upscale)
+const cv = document.getElementById('c'), octx = cv.getContext('2d');
+const nat = document.createElement('canvas'), ctx = nat.getContext('2d');
+nat.width = TW; nat.height = TH;
+let SX = 1, SY = 1, OX = 0, OY = 0;
 const IMG = ctx.createImageData(TW, TH), OUT32 = new Uint32Array(IMG.data.buffer);
 // Detection tactile (avant fit pour que la mise en page tienne compte des commandes)
 // Page unique tactile + clavier : commandes tactiles si pointeur grossier (téléphone/tablette) ou dès le premier appui
 const IS_TOUCH = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
 if (IS_TOUCH) document.documentElement.classList.add('touch');
+const SRC_W = TW, SRC_H = TH, PAR = 1.84, PAR_MIN = 1.75, PAR_MAX = 2;  // CPC mode 0 + bordure : 192x272, pixels ~1,84:1 à 2:1
 function fit() {
+  // Échelles ENTIÈRES en pixels physiques (devicePixelRatio compris) : chaque ligne et chaque colonne
+  // source couvre exactement le même nombre de pixels écran -> pixels nets, sans lignes doublées au hasard.
+  // On prend le plus grand couple (sx, sy) qui tient, avec un rapport sx/sy proche du PAR de la machine.
   const sc = document.getElementById('screen'), r = sc.getBoundingClientRect();
-  const aw = Math.max(1, r.width), ah = Math.max(1, r.height);
-  // aspect 4:3 du tube ; agrandissement plus-proche-voisin (pixelated). Si un multiple entier de 160 tient sans trop retrecir, on l'utilise.
-  let w = aw, h = w * 3 / 4;
-  if (h > ah) { h = ah; w = h * 4 / 3; }
-  const k = Math.floor(w / W); if (k >= 1 && k * W >= 0.85 * w) { w = k * W; h = w * 3 / 4; }   // entier si on perd <15 %, sinon plus-proche-voisin
-  cv.style.width = Math.floor(w) + 'px'; cv.style.height = Math.floor(h) + 'px';
+  const dpr = window.devicePixelRatio || 1;
+  const AW = Math.floor(Math.max(1, r.width) * dpr + 1e-6), AH = Math.floor(Math.max(1, r.height) * dpr + 1e-6);
+  let best = null;
+  for (let sy = 1; sy * SRC_H <= AH; sy++) for (let sx = 1; sx * SRC_W <= AW; sx++) {
+    const q = sx / sy; if (q < PAR_MIN - 1e-9 || q > PAR_MAX + 1e-9) continue;
+    const score = sx * sy - Math.abs(q - PAR) * 0.01;      // la plus grande image d'abord, puis le PAR le plus juste
+    if (!best || score > best.score) best = { sx, sy, score };
+  }
+  if (!best) {   // écran minuscule : on garde des entiers, rapport le plus proche possible
+    const sy = Math.max(1, Math.floor(AH / SRC_H));
+    best = { sx: Math.max(1, Math.min(Math.floor(AW / SRC_W), Math.round(sy * PAR))), sy };
+  }
+  // boîte CSS en pixels CSS entiers, tampon du canvas = boîte x dpr : 1 pixel du tampon = 1 pixel physique
+  SX = best.sx; SY = best.sy;
+  const cw = Math.ceil(SRC_W * SX / dpr - 1e-6), ch = Math.ceil(SRC_H * SY / dpr - 1e-6);
+  cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+  cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+  OX = (cv.width - SRC_W * SX) >> 1; OY = (cv.height - SRC_H * SY) >> 1;
+  // calage du coin haut-gauche sur un pixel physique entier
+  cv.style.position = 'relative'; cv.style.left = cv.style.top = '0px';
+  const b = cv.getBoundingClientRect(), snap = v => Number.isInteger(dpr) ? Math.round(v) - v : (Math.round(v * dpr) - v * dpr) / dpr;
+  cv.style.left = snap(b.left) + 'px'; cv.style.top = snap(b.top) + 'px';
+  upscale();
+  cv.dataset.scale = best.sx + 'x' + best.sy + '@' + dpr;
+}
+function upscale() {   // agrandissement entier, plus-proche-voisin, sans lissage
+  octx.imageSmoothingEnabled = false;
+  octx.drawImage(nat, OX, OY, SRC_W * SX, SRC_H * SY);
 }
 addEventListener('resize', fit); addEventListener('orientationchange', () => setTimeout(fit, 150)); fit();
 const FB = new Uint8Array(W * H);       // screen memory (pen per pixel)
@@ -301,7 +330,7 @@ function present() {
     const o = (y + BT) * TW + BL, f = y * W;
     for (let x = 0; x < W; x++) OUT32[o + x] = pal[FB[f + x]];
   }
-  ctx.putImageData(IMG, 0, 0);
+  ctx.putImageData(IMG, 0, 0); upscale();
 }
 
 // ------------------------------------------------------------------ AY-3-8912 emulation
