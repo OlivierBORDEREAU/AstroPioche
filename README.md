@@ -4,14 +4,16 @@
 
 Petit jeu rétro jouable dans le navigateur. Un astronaute creuse les zones qui clignotent à la surface d'un astéroïde, tire sur les météorites, puis repart en fusée. Attraper la soucoupe bonus donne une vie en plus.
 
-Le jeu existe en trois versions graphiques rétro, chacune avec une variante clavier et une variante tactile pour mobile, plus un **Remake** moderne (une seule page, tactile et clavier).
+Le jeu existe en trois versions graphiques rétro et un **Remake** moderne. Chaque version tient dans une seule page qui se joue au clavier sur ordinateur et au tactile sur mobile : les boutons tactiles n'apparaissent que sur les appareils tactiles.
 
-| Version | Clavier | Tactile |
-|---|---|---|
-| Atari 2600 | `2600.html` | `2600-touch.html` |
-| Courante (moderne) | `courante.html` | `courante-touch.html` |
-| Amstrad CPC (mode 0) | `cpc.html` | `cpc-touch.html` |
-| ASTRO PIOCHE Remake (néon) | `moderne.html` | `moderne.html` |
+| Version | Page (tactile + clavier) |
+|---|---|
+| Atari 2600 | `2600.html` |
+| Courante (moderne) | `courante.html` |
+| Amstrad CPC (mode 0) | `cpc.html` |
+| ASTRO PIOCHE Remake (néon) | `moderne.html` |
+
+Les anciennes adresses `2600-touch.html`, `courante-touch.html` et `cpc-touch.html` redirigent vers la page unique correspondante (les favoris et raccourcis existants continuent de marcher).
 
 La page `index.html` propose toutes les versions, avec leurs captures et de fausses boîtes de jeu (dans `img/`).
 
@@ -19,14 +21,17 @@ La page `index.html` propose toutes les versions, avec leurs captures et de faus
 
 ## Commandes
 
-**Au clavier**
-- Flèches gauche/droite ou `A`/`D` : se déplacer
+### Versions 2600, courante et CPC (`2600.html`, `courante.html`, `cpc.html`)
+
+**Au clavier** (sur ordinateur)
+- Flèches gauche/droite ou `Q`/`D` (clavier AZERTY) : se déplacer
 - Flèche bas ou `S` : creuser
 - `Espace`, `K` ou `Entrée` : tirer
 - `P` : pause
 - `M` : couper ou remettre le son
+- `Échap` : retour à l'accueil (avec confirmation)
 
-**En tactile** : les boutons ◀ ▶ sont à gauche, CREUSER et FEU à droite. Le multi-touch est géré.
+**En tactile** (iPhone / iPad) : les boutons ◀ ▶ sont à gauche, CREUSER et FEU à droite, et n'apparaissent que sur un appareil tactile. Le multi-touch est géré. Le bouton maison en haut à gauche ramène à l'accueil.
 
 ### ASTRO PIOCHE Remake (`moderne.html`)
 
@@ -65,27 +70,32 @@ Ce projet est publié sous licence [CC BY-NC-SA 4.0](https://creativecommons.org
 
 A small retro game that runs in the browser. An astronaut digs the blinking spots on an asteroid's surface, shoots down meteorites, then flies off in a rocket. Catching the bonus flying saucer gives you an extra life.
 
-The game comes in three retro graphic styles, each with a keyboard version and a touch version for mobile, plus a modern **Remake** (a single page for both touch and keyboard).
+The game comes in three retro graphic styles plus a modern **Remake**. Each version is a single page that plays with the keyboard on a computer and with touch on mobile: the touch buttons only appear on touch devices.
 
-| Version | Keyboard | Touch |
-|---|---|---|
-| Atari 2600 | `2600.html` | `2600-touch.html` |
-| Standard (modern) | `courante.html` | `courante-touch.html` |
-| Amstrad CPC (mode 0) | `cpc.html` | `cpc-touch.html` |
-| ASTRO PIOCHE Remake (neon) | `moderne.html` | `moderne.html` |
+| Version | Page (touch + keyboard) |
+|---|---|
+| Atari 2600 | `2600.html` |
+| Standard (modern) | `courante.html` |
+| Amstrad CPC (mode 0) | `cpc.html` |
+| ASTRO PIOCHE Remake (neon) | `moderne.html` |
+
+The old `2600-touch.html`, `courante-touch.html` and `cpc-touch.html` addresses redirect to the matching single page, so existing bookmarks and home-screen shortcuts keep working.
 
 `index.html` lists every version, with screenshots and mock game boxes (in `img/`).
 
 ## Controls
 
-**Keyboard**
-- Left/right arrows or `A`/`D`: move
+### 2600, Standard and CPC versions (`2600.html`, `courante.html`, `cpc.html`)
+
+**Keyboard** (on a computer)
+- Left/right arrows or `A`/`D` (`Q`/`D` on AZERTY): move
 - Down arrow or `S`: dig
 - `Space`, `K` or `Enter`: fire
 - `P`: pause
 - `M`: mute or unmute sound
+- `Esc`: back to the home page (with confirmation)
 
-**Touch**: the ◀ ▶ buttons are on the left, DIG (CREUSER) and FIRE (FEU) on the right. Multi-touch is supported.
+**Touch** (iPhone / iPad): the ◀ ▶ buttons are on the left, DIG (CREUSER) and FIRE (FEU) on the right; they only appear on touch devices. Multi-touch is supported. The house button at the top left goes back to the home page.
 
 ### ASTRO PIOCHE Remake (`moderne.html`)
 
