@@ -290,6 +290,7 @@ function setMute(m) {
 const cv = $('c'), ctx = cv.getContext('2d');
 const RW = 260;                     // rayon "monde" de l'astéroïde (unités)
 let W = 0, H = 0, DPR = 1, R = 200, k = 1, CX = 0, CY = 0, SPAWN_R = 600;
+let camBg = 0, camBgPrev = 0;   // angle caméra « déroulé » (sans saut ±π) pour la parallaxe du fond
 let cam = 0, shx = 0, shy = 0, trauma = 0, hitStop = 0, gt = 0;
 let stars = [], bgCv = null, vigCv = null, planetCv = null, gasCv = null, lampCv = null;
 const glowCache = new Map();
@@ -805,12 +806,13 @@ function render() {
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   ctx.drawImage(bgCv, 0, 0, W, H);
   const tr = trauma * trauma; shx = (Math.random() * 2 - 1) * tr * 14; shy = (Math.random() * 2 - 1) * tr * 14;
+  camBg += adiff(cam, camBgPrev); camBgPrev = cam;   // suit cam en continu, même quand cam passe de +π à -π
   // géante gazeuse (parallaxe lente)
-  { const gx0 = W * 0.8 - CX, gy0 = H * 0.16 - CY, d = Math.hypot(gx0, gy0), a = Math.atan2(gx0, -gy0) - cam * 0.05;
+  { const gx0 = W * 0.8 - CX, gy0 = H * 0.16 - CY, d = Math.hypot(gx0, gy0), a = Math.atan2(gx0, -gy0) - camBg * 0.05;
     ctx.drawImage(gasCv, CX + Math.sin(a) * d - 150 + shx * 0.2, CY - Math.cos(a) * d - 75 + shy * 0.2, 300, 150); }
   // étoiles en 3 couches
   for (const s of stars) {
-    const a = s.a - cam * s.f, x = CX + Math.sin(a) * s.d, y = CY - Math.cos(a) * s.d;
+    const a = s.a - camBg * s.f, x = CX + Math.sin(a) * s.d, y = CY - Math.cos(a) * s.d;
     if (x < -4 || x > W + 4 || y < -4 || y > H + 4) continue;
     ctx.globalAlpha = 0.45 + 0.55 * Math.abs(Math.sin(gt * (0.6 + s.l * 0.5) + s.tw));
     ctx.fillStyle = s.c; ctx.fillRect(x, y, s.s, s.s);
