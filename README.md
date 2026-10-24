@@ -2,7 +2,7 @@
 
 # ASTRO PIOCHE
 
-Petit jeu rétro jouable dans le navigateur. Un astronaute creuse les zones qui clignotent à la surface d'un astéroïde, tire sur les météorites, puis repart en fusée. Attraper la soucoupe bonus donne une vie en plus.
+Petit jeu rétro jouable dans le navigateur. Un astronaute creuse les zones qui clignotent à la surface d'un astéroïde, tire sur les météorites, puis repart en fusée. Attraper la soucoupe bonus donne une vie en plus (3 max).
 
 Le jeu existe en trois versions graphiques rétro et un **Remake** moderne. Chaque version tient dans une seule page qui se joue au clavier sur ordinateur et au tactile sur mobile : les boutons tactiles n'apparaissent que sur les appareils tactiles.
 
@@ -35,7 +35,7 @@ La page `index.html` propose toutes les versions, avec leurs captures et de faus
 
 ### ASTRO PIOCHE Remake (`moderne.html`)
 
-Version néon sur un astéroïde rond qui tourne, avec effets de lumière, particules et musique synthwave générée en direct. Nouveautés : combos quand on enchaîne les zones, minerai rare ◆ (y compris en orbite basse, à attraper en sautant), rochers qui roulent et fissures à sauter au jetpack, soucoupe qui lâche une capsule de vie, améliorations entre les niveaux (pioche, blaster, bouclier).
+Version néon sur un astéroïde rond qui tourne, avec effets de lumière, particules et musique synthwave générée en direct. Nouveautés : combos quand on enchaîne les zones, minerai rare ◆ (y compris en orbite basse, à attraper en sautant), rochers qui roulent et fissures à sauter au jetpack, soucoupe qui lâche une capsule de vie (3 max), améliorations entre les niveaux (pioche, blaster, bouclier).
 
 - **Au clavier** : flèches gauche/droite ou `Q`/`D` pour marcher, flèche bas ou `S` pour creuser, `Espace` pour tirer (visée assistée, gauche/droite maintenu pour pencher le tir), flèche haut ou `Z` pour le jetpack, `P` pause, `M` son, `Échap` retour à l'accueil. Dans la boutique : `1`, `2`, `3` pour acheter, `Entrée` pour décoller.
 - **En tactile** : ◀ ▶ en bas à gauche ; FEU, CREUSER et SAUT en bas à droite (multi-touch). Boutons son et pause en haut à droite.
@@ -68,7 +68,7 @@ Ce projet est publié sous licence [CC BY-NC-SA 4.0](https://creativecommons.org
 
 # ASTRO PIOCHE (English)
 
-A small retro game that runs in the browser. An astronaut digs the blinking spots on an asteroid's surface, shoots down meteorites, then flies off in a rocket. Catching the bonus flying saucer gives you an extra life.
+A small retro game that runs in the browser. An astronaut digs the blinking spots on an asteroid's surface, shoots down meteorites, then flies off in a rocket. Catching the bonus flying saucer gives you an extra life (max 3).
 
 The game comes in three retro graphic styles plus a modern **Remake**. Each version is a single page that plays with the keyboard on a computer and with touch on mobile: the touch buttons only appear on touch devices.
 
@@ -99,7 +99,7 @@ The old `2600-touch.html`, `courante-touch.html` and `cpc-touch.html` addresses 
 
 ### ASTRO PIOCHE Remake (`moderne.html`)
 
-A neon version on a round, rotating asteroid, with lighting effects, particles and live-generated synthwave music. New: combos for chaining digs, rare ◆ ore (including ore floating in low orbit that you grab by jumping), rolling boulders and fissures to jump over with the jetpack, a saucer that drops an extra-life capsule, and upgrades between levels (pickaxe, blaster, shield).
+A neon version on a round, rotating asteroid, with lighting effects, particles and live-generated synthwave music. New: combos for chaining digs, rare ◆ ore (including ore floating in low orbit that you grab by jumping), rolling boulders and fissures to jump over with the jetpack, a saucer that drops an extra-life capsule (max 3), and upgrades between levels (pickaxe, blaster, shield).
 
 - **Keyboard**: left/right arrows or `A`/`D` (`Q`/`D` on AZERTY) to walk, down arrow or `S` to dig, `Space` to fire (auto-aim; hold left/right to tilt your shot), up arrow or `W` (`Z` on AZERTY) for the jetpack, `P` pause, `M` sound, `Esc` back to the home page. In the shop: `1`, `2`, `3` to buy, `Enter` to take off.
 - **Touch**: ◀ ▶ bottom left; FIRE (FEU), DIG (CREUSER) and JUMP (SAUT) bottom right (multi-touch). Sound and pause buttons top right.

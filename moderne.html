@@ -160,7 +160,7 @@
 /* =====================================================================
    ASTRO PIOCHE Remake
    Même boucle que l'original : creuser les zones qui clignotent, tirer
-   sur les météorites, toucher la soucoupe (vie bonus), puis rejoindre la
+   sur les météorites, toucher la soucoupe (vie bonus, 3 max), puis rejoindre la
    fusée. Habillage néon / vectoriel sur Canvas 2D, son 100 % WebAudio.
    ===================================================================== */
 var paused = false;                 // utilisé aussi par le bouton accueil
@@ -692,8 +692,8 @@ function player(dt) {
   if (G.rocketReady && Math.abs(adiff(P.a, 0)) < 0.05 && P.h < 8) launch();
   if (capsule && capsule.h < 34 && Math.abs(adiff(capsule.a, P.a)) < 18 / RW) {
     const [cx2, cy2] = pt(capsule.a, surf(capsule.a) + capsule.h + 20);
-    G.lives = Math.min(9, G.lives + 1); G.cry += 1; capsule = null; sfx('life'); buzz(40);
-    ftext(cx2, cy2, '+1 VIE  ◆+1', 'rgb(140,255,160)', true); burst(cx2, cy2, 24, 'rgb(140,255,160)', 180, 0.6, 2, 1); hud();
+    const full = G.lives >= 3; G.lives = Math.min(3, G.lives + 1); G.cry += 1; capsule = null; sfx('life'); buzz(40);
+    ftext(cx2, cy2, full ? 'VIES MAX  ◆+1' : '+1 VIE  ◆+1', 'rgb(140,255,160)', true); burst(cx2, cy2, 24, 'rgb(140,255,160)', 180, 0.6, 2, 1); hud();
   }
 }
 function spawner(dt) {
@@ -1160,8 +1160,8 @@ $('bPause').addEventListener('click', () => { initAudio(); setPause(!userPause);
 $('bResume').addEventListener('click', () => setPause(false));
 $('bMute').addEventListener('click', () => { initAudio(); setMute(!muted); });
 $('helpTxt').innerHTML = IS_TOUCH
-  ? '<b>◀ ▶</b> marcher · <b>CREUSER</b> les zones lumineuses<br><b>FEU</b> vise tout seul · <b>SAUT</b> = jetpack<br>Saute rochers et fissures, attrape le ◆ volant<br>Enchaîne les <b>combos</b>, ramasse le minerai ◆,<br>abats la soucoupe pour une vie,<br>puis file à la fusée !'
-  : '<b>← →</b> ou <b>Q D</b> marcher · <b>↓</b> ou <b>S</b> creuser · <b>Espace</b> tirer<br><b>↑</b> ou <b>Z</b> jetpack · <b>P</b> pause · <b>M</b> son · <b>Échap</b> accueil<br>Saute les rochers et fissures, attrape le minerai ◆ en orbite<br>Creuse vite pour enchaîner les <b>combos</b>, ramasse le minerai rare ◆,<br>touche la soucoupe pour une vie, puis rejoins la fusée !';
+  ? '<b>◀ ▶</b> marcher · <b>CREUSER</b> les zones lumineuses<br><b>FEU</b> vise tout seul · <b>SAUT</b> = jetpack<br>Saute rochers et fissures, attrape le ◆ volant<br>Enchaîne les <b>combos</b>, ramasse le minerai ◆,<br>abats la soucoupe pour une vie (3 max),<br>puis file à la fusée !'
+  : '<b>← →</b> ou <b>Q D</b> marcher · <b>↓</b> ou <b>S</b> creuser · <b>Espace</b> tirer<br><b>↑</b> ou <b>Z</b> jetpack · <b>P</b> pause · <b>M</b> son · <b>Échap</b> accueil<br>Saute les rochers et fissures, attrape le minerai ◆ en orbite<br>Creuse vite pour enchaîner les <b>combos</b>, ramasse le minerai rare ◆,<br>touche la soucoupe pour une vie (3 max),<br>puis rejoins la fusée !';
 $('tRec').textContent = 'RECORD ' + HI;
 setMute(muted);
 

@@ -727,7 +727,7 @@ function updateWorld(dt, canHit) {
     if (!dead && s) {
       const hb = hitbox('saucer', { x: 0, y: 3, w: 12, h: 5 });
       if (b.x + 1 >= s.x + hb.x && b.x <= s.x + hb.x + hb.w && b.y <= s.y + hb.y + hb.h && b.y + 4 >= s.y + hb.y) {
-        dead = true; G.saucer = null; G.lives = Math.min(9, G.lives + 1); G.score += 300;
+        dead = true; G.saucer = null; G.lives = Math.min(3, G.lives + 1); G.score += 300;
         boom(s.x + 6, s.y + 4); burst(s.x + 6, s.y + 4, 16, [BM, MV, PC, BW], 50); SFX.boom(); SFX.life();
       }
     }
@@ -756,7 +756,7 @@ function toTitle() {
   textC(BG, 54, 'PIOCHE', BM, 2);
   textC(BG, 76, 'CREUSE LES ZONES', BW);
   textC(BG, 86, 'ABATS LES METEORES', BW);
-  textC(BG, 96, 'SOUCOUPE = +1 VIE', PY);
+  textC(BG, 96, 'SOUCOUPE=VIE (3 MAX)', PY);
   text(BG, 0, 4, 'AMSTRAD CPC', PC);
   text(BG, 0, 190, 'RECORD ' + String(G.hi).padStart(6, '0'), BM);
   fullRestore(); hudKey = '';

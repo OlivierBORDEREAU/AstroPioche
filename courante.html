@@ -447,9 +447,9 @@ function updateWorld(dt, canHit) {
     const s = G.saucer;
     if (!dead && s && b.x >= s.x - 1 && b.x <= s.x + 13 && b.y >= s.y - 3 && b.y <= s.y + 6) {
       dead = true; G.saucer = null;
-      G.lives = Math.min(9, G.lives + 1); G.score += 300;
+      const full = G.lives >= 3; G.lives = Math.min(3, G.lives + 1); G.score += 300;
       burst(s.x + 6, s.y + 2, 30, [C.purple, C.pink, C.cyan, C.yellow, C.white], 55);
-      addText(s.x + 6, s.y + 8, '+1 VIE', C.pink, 1.6); SFX.boom(); SFX.life();
+      addText(s.x + 6, s.y + 8, full ? 'VIES MAX' : '+1 VIE', C.pink, 1.6); SFX.boom(); SFX.life();
     }
     if (dead) G.bullets.splice(i, 1);
   }
@@ -629,7 +629,7 @@ function renderTitle() {
   textC('PIOCHE', 48, C.orange, 3, 4);
   textC('CREUSE LES ZONES QUI CLIGNOTENT', 86, C.white);
   textC('ABATS LES METEORITES', 96, C.white);
-  textC('LA SOUCOUPE DONNE UNE VIE', 106, C.pink);
+  textC('LA SOUCOUPE DONNE UNE VIE - 3 MAX', 106, C.pink);
   if ((G.t * 2 | 0) % 2 === 0) textC('APPUIE SUR FEU', 124, C.yellow);
   textC('FLECHES OU WASD : BOUGER', 134, C.lgray);
   textC('BAS : CREUSER   ESPACE : FEU', 142, C.lgray);

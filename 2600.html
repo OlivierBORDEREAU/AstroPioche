@@ -577,7 +577,7 @@ function updateWorld(dt, canHit) {
     }
     const s = G.saucer;
     if (!dead && s && bl.x >= s.x - 1 && bl.x <= s.x + 16 && bl.y <= s.y + 6 && bl.y + 4 >= s.y) {
-      dead = true; G.saucer = null; G.lives = Math.min(9, G.lives + 1); G.score += 300;
+      dead = true; G.saucer = null; G.lives = Math.min(3, G.lives + 1); G.score += 300;
       boom(s.x + 4, s.y); play(1, SFX.boom, 4); play(0, SFX.life, 6);
     }
     if (dead) G.bullet = null;
