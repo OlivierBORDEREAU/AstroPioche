@@ -481,7 +481,7 @@ function spawnZone() {
     let ok = Math.abs(adiff(a, 0)) > 0.13;
     for (const z of zones) if (Math.abs(adiff(z.a, a)) < ZW * 3) ok = false;
     for (const h of holes) if (Math.abs(adiff(h.a, a)) < ZW * 2.2) ok = false;
-    if (ok) { zones.push({ a, life: G.zoneLife, max: G.zoneLife, prog: 0, age: 0, rare: Math.random() < 0.22 }); return; }
+    if (ok) { zones.push({ a, life: G.zoneLife, max: G.zoneLife, prog: 0, age: 0, rare: Math.random() < 0.12 }); return; }
   }
 }
 function spawnMeteor(harmless) {
@@ -594,7 +594,7 @@ function spawnFissure() {
 }
 function spawnOre() {
   const a = wrapA(P.a + (Math.random() < 0.5 ? -1 : 1) * rnd(0.25, 0.8));
-  ores.push({ a, alt: 46 + rnd(0, 6), t: Math.random() * 6, life: 12, va: rnd(-0.04, 0.04) });
+  ores.push({ a, alt: 46 + rnd(0, 6), t: Math.random() * 6, life: 8, va: rnd(-0.04, 0.04) });
   hazFirst('o', 'MINERAI EN ORBITE ◆', 'Saute pour l\'attraper');
 }
 function orePos(o) { return pt(o.a, surf(o.a) + o.alt + Math.sin(o.t * 2.2) * 3); }
@@ -693,8 +693,8 @@ function player(dt) {
   if (G.rocketReady && Math.abs(adiff(P.a, 0)) < 0.05 && P.h < 8) launch();
   if (capsule && capsule.h < 34 && Math.abs(adiff(capsule.a, P.a)) < 18 / RW) {
     const [cx2, cy2] = pt(capsule.a, surf(capsule.a) + capsule.h + 20);
-    const full = G.lives >= 3; G.lives = Math.min(3, G.lives + 1); G.cry += 1; capsule = null; sfx('life'); buzz(40);
-    ftext(cx2, cy2, full ? 'VIES MAX  ◆+1' : '+1 VIE  ◆+1', 'rgb(140,255,160)', true); burst(cx2, cy2, 24, 'rgb(140,255,160)', 180, 0.6, 2, 1); hud();
+    const full = G.lives >= 3; G.lives = Math.min(3, G.lives + 1); if (!full) G.cry += 1; capsule = null; sfx('life'); buzz(40);
+    ftext(cx2, cy2, full ? 'VIES MAX' : '+1 VIE  ◆+1', 'rgb(140,255,160)', true); burst(cx2, cy2, 24, 'rgb(140,255,160)', 180, 0.6, 2, 1); hud();
   }
 }
 function spawner(dt) {
@@ -702,17 +702,17 @@ function spawner(dt) {
   if (G.zoneT <= 0 && zones.length < G.maxZones && G.zonesDone + zones.length < G.target) { spawnZone(); G.zoneT = rnd(0.6, 1.5); }
   G.spawnT -= dt;
   if (G.spawnT <= 0 && meteors.length < G.maxM) { spawnMeteor(false); G.spawnT = G.mEvery * rnd(0.6, 1.4); }
-  // dangers au sol : à partir du niveau 2 (rochers), 3 (fissures), rares au début
+  // dangers au sol : à partir du niveau 3 (rochers), 4 (fissures), rares au début
   G.hazT -= dt;
   if (G.hazT <= 0) {
     const L = G.level;
-    if (L >= 2 && boulders.length === 0 && Math.random() < 0.6) spawnBoulder();
-    else if (L >= 3 && fissures.length < 2) spawnFissure();
+    if (L >= 3 && boulders.length === 0 && Math.random() < 0.6) spawnBoulder();
+    else if (L >= 4 && fissures.length < 2) spawnFissure();
     G.hazT = Math.max(7, 16 - L * 0.8) * rnd(0.8, 1.3);
   }
   G.oreT -= dt;
-  if (G.oreT <= 0) { if (ores.length < 2) spawnOre(); G.oreT = rnd(9, 15); }
-  if (!saucer && !capsule && Math.random() < dt / 20) {
+  if (G.oreT <= 0) { if (G.level >= 2 && ores.length < 1) spawnOre(); G.oreT = rnd(18, 28); }
+  if (!saucer && !capsule && Math.random() < dt / (45 + G.level * 2)) {
     const side = Math.random() < 0.5 ? -1 : 1;
     saucer = { a: wrapA(cam + side * 1.5), alt: 165 + rnd(0, 30), va: -side * (0.3 + G.level * 0.012), t: 0 }; sfx('saucer');
   }
